@@ -6,7 +6,11 @@ const config: Config = {
     "./src/**/*.{js,ts,jsx,tsx,mdx}", // Memastikan semua file di src diproses
   ],
   theme: {
-    extend: {},
+    extend: {
+      fontFamily: {
+        sans: ['var(--font-jakarta)', 'sans-serif'],
+      },
+    },
   },
   plugins: [],
 };

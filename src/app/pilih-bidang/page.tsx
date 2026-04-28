@@ -4,6 +4,10 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
+type StoredUser = {
+  id: string | number;
+};
+
 const DAFTAR_BIDANG = [
   "Teknologi",
   "Otomotif",
@@ -13,39 +17,15 @@ const DAFTAR_BIDANG = [
   "Pangan",
 ];
 
-// Konfigurasi Animasi Container (Muncul berurutan)
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-      delayChildren: 0.2,
-    },
-  },
-};
-
-// Konfigurasi Animasi Tiap Kartu Bidang
-const itemVariants = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: { type: "spring", stiffness: 100 },
-  },
-};
-
 export default function PilihBidangPage() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<StoredUser | null>(null);
   const router = useRouter();
 
-  // Ambil data user dari localStorage saat mount
   useEffect(() => {
-    const userData = localStorage.getItem("user");
+    const userData = localStorage.getItem("currentUser");
     if (!userData) return router.push("/register");
-    setUser(JSON.parse(userData));
+    setUser(JSON.parse(userData) as StoredUser);
   }, [router]);
 
   const toggleTag = (tag: string) => {
@@ -56,8 +36,8 @@ export default function PilihBidangPage() {
 
   const handleSimpan = async () => {
     if (selectedTags.length === 0) return alert("Pilih minimal satu bidang!");
+    if (!user) return;
 
-    // 1. Simpan tag bidang ke database
     const { error } = await supabase
       .from("users")
       .update({ tag: selectedTags })
@@ -65,16 +45,17 @@ export default function PilihBidangPage() {
 
     if (error) {
       alert("Gagal menyimpan: " + error.message);
-    } else {
-      // 2. Profil bidang tersimpan, lanjut ke halaman input link
-      // Jangan hapus localStorage di sini agar data user masih bisa dipakai di halaman berikutnya
-      router.push("/input-link");
+      return;
     }
+
+    const old = localStorage.getItem("currentUser");
+    const oldUser = old ? JSON.parse(old) : {};
+    localStorage.setItem("currentUser", JSON.stringify({ ...oldUser, tag: selectedTags }));
+    router.push("/menyiapkan-dashboard");
   };
 
   return (
-    <div className="relative min-h-screen bg-white flex items-center justify-center p-4 overflow-hidden font-sans">
-      {/* --- THE PERFECT GRID BACKGROUND (0.07 Opacity) --- */}
+    <div className="relative min-h-screen bg-white flex items-center justify-center px-4 py-6 sm:p-4 overflow-hidden font-sans">
       <div
         className="absolute inset-0 z-0 pointer-events-none"
         style={{
@@ -88,81 +69,86 @@ export default function PilihBidangPage() {
         }}
       />
 
-      {/* Card Utama dengan Efek Glassmorphism Tipis */}
       <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-        className="relative z-10 bg-white/90 backdrop-blur-sm p-8 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.08)] w-full max-w-lg border border-slate-200"
+        initial={{ opacity: 0, y: 28, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+        className="relative z-10 w-full max-w-2xl rounded-[1.8rem] sm:rounded-[2.5rem] border border-slate-200 bg-white/90 p-5 sm:p-8 shadow-[0_20px_60px_rgba(15,23,42,0.12)] backdrop-blur-sm"
       >
-        <div className="text-center mb-8">
-          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+        <div className="text-center mb-5 sm:mb-8">
+          <p className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 mb-3 sm:mb-4">
+            Personalisasi Preferensi
+          </p>
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">
             Pilih Bidang
           </h2>
-          <p className="text-slate-500 mt-2 text-sm">
-            Sesuaikan kategori bisnis untuk memfilter tender Anda.
+          <p className="text-slate-500 mt-1 sm:mt-2 text-xs sm:text-sm md:text-base">
+            Pilihan bidang ini dipakai untuk membatasi hasil produk dan jasa.
           </p>
         </div>
 
-        {/* Grid Bidang dengan Animasi Stagger */}
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="grid grid-cols-2 gap-3 mb-8"
-        >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 mb-6 sm:mb-8">
           {DAFTAR_BIDANG.map((bidang) => {
             const isSelected = selectedTags.includes(bidang);
             return (
-              <motion.label
+              <motion.button
                 key={bidang}
-                variants={itemVariants}
-                whileHover={{ scale: 1.02, y: -2 }}
+                type="button"
+                onClick={() => toggleTag(bidang)}
+                whileHover={{ y: -2, scale: 1.01 }}
                 whileTap={{ scale: 0.98 }}
+                layout
                 className={`
-                  flex items-center p-4 rounded-2xl cursor-pointer border-2 transition-all duration-200
+                  relative overflow-hidden rounded-xl sm:rounded-2xl border-2 p-3 sm:p-4 text-left transition-all duration-300
                   ${
                     isSelected
-                      ? "border-black bg-black text-white shadow-lg shadow-black/10"
+                      ? "border-black bg-black text-white shadow-xl shadow-black/20"
                       : "border-slate-100 bg-white hover:border-slate-300 text-slate-700"
                   }
                 `}
               >
-                <input
-                  type="checkbox"
-                  className="hidden"
-                  onChange={() => toggleTag(bidang)}
-                />
-
-                {/* Custom Checkbox Bulat */}
-                <div
-                  className={`w-4 h-4 rounded-full border-2 mr-3 flex items-center justify-center transition-all ${
-                    isSelected
-                      ? "bg-white border-white"
-                      : "bg-white border-slate-300"
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold tracking-tight text-sm sm:text-base">{bidang}</span>
+                  <motion.span
+                    animate={{
+                      scale: isSelected ? 1 : 0.85,
+                      opacity: isSelected ? 1 : 0.35,
+                    }}
+                    className={`h-6 w-6 rounded-full border-2 flex items-center justify-center ${
+                      isSelected ? "border-white bg-white/15" : "border-slate-300"
+                    }`}
+                  >
+                    <span
+                      className={`h-2.5 w-2.5 rounded-full ${
+                        isSelected ? "bg-white" : "bg-slate-300"
+                      }`}
+                    />
+                  </motion.span>
+                </div>
+                <p
+                  className={`mt-2 text-xs ${
+                    isSelected ? "text-white/80" : "text-slate-400"
                   }`}
                 >
-                  {isSelected && (
-                    <div className="w-1.5 h-1.5 bg-black rounded-full" />
-                  )}
-                </div>
-
-                <span className="font-bold text-sm tracking-tight uppercase">
-                  {bidang}
-                </span>
-              </motion.label>
+                  Fokuskan rekomendasi sesuai bidang ini.
+                </p>
+              </motion.button>
             );
           })}
-        </motion.div>
+        </div>
 
-        {/* Tombol Simpan */}
-        <button
+        <motion.button
           onClick={handleSimpan}
-          className="w-full bg-black text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl active:scale-[0.98] shadow-black/10"
+          whileHover={{ y: -1, scale: 1.005 }}
+          whileTap={{ scale: 0.985 }}
+          className="w-full rounded-2xl bg-black py-3.5 sm:py-4 font-bold text-white shadow-xl shadow-black/20 transition-all hover:bg-slate-800 text-sm sm:text-base"
         >
-          SIMPAN & LANJUTKAN
-        </button>
+          {selectedTags.length > 0
+            ? `SIMPAN ${selectedTags.length} BIDANG & LANJUTKAN`
+            : "SIMPAN & LANJUTKAN"}
+        </motion.button>
       </motion.div>
     </div>
   );
 }
+

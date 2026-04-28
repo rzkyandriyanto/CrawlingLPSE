@@ -24,7 +24,20 @@ export default function RegisterPage() {
       setLoading(false);
       return;
     }
+    // 1. Cek apakah email sudah terdaftar
+    const { data: existingUser } = await supabase
+      .from("users")
+      .select("id")
+      .eq("email", formData.email)
+      .single();
 
+    if (existingUser) {
+      alert("Email sudah terdaftar! Silakan gunakan email lain atau login.");
+      setLoading(false);
+      return;
+    }
+
+    // 2. Jika belum ada, baru insert
     const { data, error } = await supabase
       .from("users")
       .insert([formData])
@@ -34,13 +47,13 @@ export default function RegisterPage() {
       alert("Gagal registrasi: " + error.message);
       setLoading(false);
     } else {
-      localStorage.setItem("user", JSON.stringify(data[0]));
+      localStorage.setItem("currentUser", JSON.stringify(data[0]));
       router.push("/pilih-bidang");
     }
   };
 
   return (
-    <div className="relative min-h-screen bg-white flex items-center justify-center p-4 overflow-hidden font-sans text-slate-800">
+    <div className="relative min-h-screen bg-white flex items-center justify-center px-4 py-6 sm:p-4 overflow-hidden font-sans text-slate-800">
       {/* --- GRID BACKGROUND DENGAN ANIMASI MASUK --- */}
       <motion.div
         // Efek Transisi Masuk untuk Grid (Memudar dari transparan ke 0.07)
@@ -69,21 +82,21 @@ export default function RegisterPage() {
           delay: 0.2, // Sedikit jeda setelah grid muncul
           ease: [0.22, 1, 0.36, 1], // Cubic Bezier untuk efek "membal" yang halus
         }}
-        className="relative z-10 bg-white/90 backdrop-blur-sm p-8 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.08)] w-full max-w-md border border-b-4 border-b-black shadow-2xl flex flex-col"
+        className="relative z-10 bg-white/90 backdrop-blur-sm p-6 sm:p-8 rounded-[1.8rem] sm:rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.08)] w-full max-w-md border border-b-4 border-b-black shadow-2xl flex flex-col"
       >
         {/* Header: Logo & Judul dipadatkan */}
-        <div className="flex flex-col items-center mb-6">
+        <div className="flex flex-col items-center mb-5 sm:mb-6">
           <img
             src="/logologo.png"
             alt="Logo Perusahaan"
-            className="h-14 w-auto object-contain mb-2"
+            className="h-10 sm:h-14 w-auto object-contain mb-2"
           />
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
             Daftar Akun Baru
           </h2>
         </div>
 
-        <form onSubmit={handleRegister} className="space-y-4">
+        <form onSubmit={handleRegister} className="space-y-3 sm:space-y-4">
           <div className="space-y-1">
             <label className="text-xs font-bold uppercase tracking-wider text-slate-500 px-1">
               Nama Perusahaan
@@ -92,7 +105,7 @@ export default function RegisterPage() {
               type="text"
               placeholder="Masukkan nama resmi"
               required
-              className="w-full p-3 rounded-xl border border-slate-200 bg-white/50 outline-none focus:ring-2 focus:ring-black transition"
+              className="w-full p-3 rounded-xl border border-slate-200 bg-white/50 outline-none focus:ring-2 focus:ring-black transition text-sm sm:text-base"
               onChange={(e) =>
                 setFormData({ ...formData, perusahaan: e.target.value })
               }
@@ -107,7 +120,7 @@ export default function RegisterPage() {
               type="email"
               placeholder="nama@perusahaan.com"
               required
-              className="w-full p-3 rounded-xl border border-slate-200 bg-white/50 outline-none focus:ring-2 focus:ring-black transition"
+              className="w-full p-3 rounded-xl border border-slate-200 bg-white/50 outline-none focus:ring-2 focus:ring-black transition text-sm sm:text-base"
               onChange={(e) =>
                 setFormData({ ...formData, email: e.target.value })
               }
@@ -122,7 +135,7 @@ export default function RegisterPage() {
               type="text"
               placeholder="Kota, Provinsi"
               required
-              className="w-full p-3 rounded-xl border border-slate-200 bg-white/50 outline-none focus:ring-2 focus:ring-black transition"
+              className="w-full p-3 rounded-xl border border-slate-200 bg-white/50 outline-none focus:ring-2 focus:ring-black transition text-sm sm:text-base"
               onChange={(e) =>
                 setFormData({ ...formData, alamat: e.target.value })
               }
@@ -137,7 +150,7 @@ export default function RegisterPage() {
               type="password"
               placeholder="Minimal 6 karakter"
               required
-              className="w-full p-3 rounded-xl border border-slate-200 bg-white/50 outline-none focus:ring-2 focus:ring-black transition"
+              className="w-full p-3 rounded-xl border border-slate-200 bg-white/50 outline-none focus:ring-2 focus:ring-black transition text-sm sm:text-base"
               onChange={(e) =>
                 setFormData({ ...formData, password: e.target.value })
               }
@@ -149,15 +162,15 @@ export default function RegisterPage() {
             whileTap={{ scale: 0.98 }}
             type="submit"
             disabled={loading}
-            className="w-full bg-black text-white py-4 mt-2 rounded-2xl font-bold transition shadow-xl shadow-black/10 disabled:opacity-50"
+            className="w-full bg-black text-white py-3.5 sm:py-4 mt-2 rounded-2xl font-bold transition shadow-xl shadow-black/10 disabled:opacity-50 text-sm sm:text-base"
           >
             {loading ? "Sedang Memproses..." : "DAFTAR & MASUK"}
           </motion.button>
         </form>
 
-        <p className="text-center mt-6 text-sm text-slate-500 font-medium">
+        <p className="text-center mt-5 sm:mt-6 text-xs sm:text-sm text-slate-500 font-medium">
           Sudah punya akun?{" "}
-          <Link href="/" className="text-black font-bold hover:underline ml-1">
+          <Link href="/login" className="text-black font-bold hover:underline ml-1">
             Login di sini
           </Link>
         </p>
