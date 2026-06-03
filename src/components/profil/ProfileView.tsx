@@ -1,7 +1,12 @@
-import { motion } from "framer-motion";
-import { User, Camera, Mail, Edit3, Save, XCircle, Tag, MapPin, Building2, Globe } from "lucide-react";
-import { StoredUser } from "@/types";
+"use client";
 
+import { motion, AnimatePresence } from "framer-motion";
+import { User, Camera, Mail, Edit3, Save, XCircle, Tag, MapPin, Building2, Globe, Search, ChevronDown, X } from "lucide-react";
+import { StoredUser } from "@/types";
+import { useState, useRef, useEffect } from "react";
+import { PROVINSI_INDONESIA, KOTA_PROVINSI_MAP, KOTA_INDONESIA, LocationDropdown } from "@/components/common/LocationDropdown";
+
+// ── Tipe Props ────────────────────────────────────────────────────────────────
 type ProfileViewProps = {
   user: StoredUser;
   language: "ID" | "EN";
@@ -47,7 +52,7 @@ export default function ProfileView({
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
       <div className="max-w-5xl mx-auto">
-        <div className="bg-white rounded-[2rem] border-2 border-slate-100 shadow-sm overflow-hidden">
+        <div className="rounded-[2rem] border shadow-sm overflow-hidden" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)" }}>
           <div className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-slate-700 h-32 sm:h-40">
             <div
               className="absolute inset-0 opacity-10"
@@ -61,13 +66,9 @@ export default function ProfileView({
             {/* Avatar */}
             <div className="relative -mt-16 sm:-mt-20 mb-5">
               <div className="relative inline-block">
-                <div className="h-28 w-28 sm:h-36 sm:w-36 rounded-full border-4 border-white shadow-xl overflow-hidden bg-slate-100">
+                <div className="h-28 w-28 sm:h-36 sm:w-36 rounded-full border-4 shadow-xl overflow-hidden" style={{ borderColor: "var(--bg-card)", backgroundColor: "var(--bg-secondary)" }}>
                   {user.foto_url ? (
-                    <img
-                      src={user.foto_url}
-                      alt="Foto Profil"
-                      className="h-full w-full object-cover"
-                    />
+                    <img src={user.foto_url} alt="Foto Profil" className="h-full w-full object-cover" />
                   ) : (
                     <div className="h-full w-full bg-gradient-to-br from-slate-200 to-slate-300 flex items-center justify-center">
                       <User size={48} className="text-slate-400" />
@@ -77,7 +78,8 @@ export default function ProfileView({
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingFoto}
-                  className="absolute bottom-1 right-1 p-2.5 bg-black text-white rounded-full shadow-lg hover:bg-slate-800 transition-all disabled:opacity-50 border-2 border-white"
+                  className="absolute bottom-1 right-1 p-2.5 bg-black text-white rounded-full shadow-lg hover:bg-slate-800 transition-all disabled:opacity-50 border-2"
+                  style={{ borderColor: "var(--bg-card)" }}
                   title={language === "EN" ? "Change Photo" : "Ganti Foto"}
                 >
                   {uploadingFoto ? (
@@ -86,13 +88,7 @@ export default function ProfileView({
                     <Camera size={16} />
                   )}
                 </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={onFotoUpload}
-                />
+                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onFotoUpload} />
               </div>
             </div>
 
@@ -106,7 +102,8 @@ export default function ProfileView({
                       value={profileForm.perusahaan}
                       onChange={(e) => onFormChange("perusahaan", e.target.value)}
                       placeholder={language === "EN" ? "Company Name" : "Nama Perusahaan"}
-                      className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-white text-lg font-black outline-none focus:border-black transition-all"
+                      className="w-full px-4 py-2.5 rounded-xl border outline-none transition-all text-base font-bold"
+                      style={{ backgroundColor: "var(--bg-input)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }}
                     />
                   </div>
                   <div>
@@ -115,16 +112,17 @@ export default function ProfileView({
                       value={profileForm.email}
                       onChange={(e) => onFormChange("email", e.target.value)}
                       placeholder={language === "EN" ? "Company Email" : "Email Perusahaan"}
-                      className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-white text-sm font-semibold outline-none focus:border-black transition-all"
+                      className="w-full px-4 py-2.5 rounded-xl border outline-none transition-all text-sm font-semibold"
+                      style={{ backgroundColor: "var(--bg-input)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }}
                     />
                   </div>
                 </div>
               ) : (
                 <>
-                  <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  <h2 className="text-2xl sm:text-3xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>
                     {user.perusahaan || (language === "EN" ? "Company Name" : "Nama Perusahaan")}
                   </h2>
-                  <p className="text-sm text-slate-400 font-medium mt-1 flex items-center gap-1.5">
+                  <p className="text-sm font-medium mt-1 flex items-center gap-1.5" style={{ color: "var(--text-secondary)" }}>
                     <Mail size={14} />{" "}
                     {user.email || (language === "EN" ? "email@company.com" : "email@perusahaan.com")}
                   </p>
@@ -137,6 +135,7 @@ export default function ProfileView({
               <button
                 onClick={onStartEditing}
                 className="mb-8 px-5 py-2.5 bg-black text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition-all shadow-lg shadow-black/10 flex items-center gap-2"
+                style={{ backgroundColor: "var(--accent)", color: "#ffffff" }}
               >
                 <Edit3 size={15} /> {language === "EN" ? "Edit Profile" : "Edit Profil"}
               </button>
@@ -145,7 +144,8 @@ export default function ProfileView({
                 <button
                   onClick={onSaveProfile}
                   disabled={profileSaving}
-                  className="px-5 py-2.5 bg-black text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition-all shadow-lg shadow-black/10 flex items-center gap-2 disabled:opacity-50"
+                  className="px-5 py-2.5 text-white rounded-xl font-bold text-sm transition-all shadow-lg flex items-center gap-2 disabled:opacity-50"
+                  style={{ backgroundColor: "var(--accent)" }}
                 >
                   {profileSaving ? (
                     <>
@@ -160,7 +160,8 @@ export default function ProfileView({
                 </button>
                 <button
                   onClick={onCancelEditing}
-                  className="px-5 py-2.5 bg-white text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all border-2 border-slate-200 flex items-center gap-2"
+                  className="px-5 py-2.5 rounded-xl font-bold text-sm transition-all border flex items-center gap-2 hover:bg-[var(--bg-secondary)]"
+                  style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)", color: "var(--text-secondary)" }}
                 >
                   <XCircle size={15} /> {language === "EN" ? "Cancel" : "Batal"}
                 </button>
@@ -170,10 +171,10 @@ export default function ProfileView({
             {/* Profile Info Grid */}
             <div className="space-y-5">
               {/* Bidang Usaha */}
-              <div className="p-4 sm:p-5 bg-slate-50/80 rounded-2xl border border-slate-100">
+              <div className="p-4 sm:p-5 rounded-2xl border" style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border-primary)" }}>
                 <div className="flex items-center gap-2 mb-3">
-                  <Tag size={16} className="text-slate-400" />
-                  <span className="text-xs font-black uppercase tracking-widest text-slate-400">
+                  <Tag size={16} style={{ color: "var(--text-muted)" }} />
+                  <span className="text-xs font-black uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
                     {language === "EN" ? "Business Field" : "Bidang Usaha"}
                   </span>
                 </div>
@@ -186,11 +187,14 @@ export default function ProfileView({
                           key={bidang}
                           type="button"
                           onClick={() => onToggleProfileTag(bidang)}
-                          className={`px-3 py-2.5 rounded-xl font-bold text-sm transition-all border-2 ${
-                            isSelected
-                              ? "bg-black text-white border-black shadow-lg shadow-black/10"
-                              : "bg-white text-slate-500 border-slate-200 hover:border-slate-400"
+                          className={`px-3 py-2.5 rounded-xl font-bold text-sm transition-all border ${
+                            isSelected ? "text-white shadow-lg" : "hover:border-[var(--text-secondary)]"
                           }`}
+                          style={
+                            isSelected
+                              ? { backgroundColor: "var(--accent)", borderColor: "var(--accent)" }
+                              : { backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)", color: "var(--text-secondary)" }
+                          }
                         >
                           {bidang}
                         </button>
@@ -201,15 +205,12 @@ export default function ProfileView({
                   <div className="flex flex-wrap gap-2">
                     {selectedBidang.length > 0 ? (
                       selectedBidang.map((b) => (
-                        <span
-                          key={b}
-                          className="px-3 py-1.5 bg-black text-white rounded-lg text-xs font-bold"
-                        >
+                        <span key={b} className="px-3 py-1.5 rounded-lg text-xs font-bold text-white" style={{ backgroundColor: "var(--accent)" }}>
                           {b}
                         </span>
                       ))
                     ) : (
-                      <span className="text-sm text-slate-400 italic">
+                      <span className="text-sm italic" style={{ color: "var(--text-muted)" }}>
                         {language === "EN" ? "Not selected" : "Belum dipilih"}
                       </span>
                     )}
@@ -219,50 +220,59 @@ export default function ProfileView({
 
               {/* Kota & Provinsi */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-4 sm:p-5 bg-slate-50/80 rounded-2xl border border-slate-100">
+                {/* KOTA */}
+                <div className="p-4 sm:p-5 rounded-2xl border" style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border-primary)" }}>
                   <div className="flex items-center gap-2 mb-3">
-                    <MapPin size={16} className="text-slate-400" />
-                    <span className="text-xs font-black uppercase tracking-widest text-slate-400">
+                    <MapPin size={16} style={{ color: "var(--text-muted)" }} />
+                    <span className="text-xs font-black uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
                       {language === "EN" ? "City" : "Kota"}
                     </span>
                   </div>
                   {isEditingProfile ? (
-                    <input
-                      type="text"
+                    <LocationDropdown
                       value={profileForm.kota}
-                      onChange={(e) => onFormChange("kota", e.target.value)}
-                      placeholder={language === "EN" ? "Enter city" : "Masukkan kota"}
-                      className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-white text-sm font-semibold outline-none focus:border-black transition-all"
+                      onChange={(val) => {
+                        onFormChange("kota", val);
+                        // Jika ada pemetaan kota -> provinsi, otomatis isi provinsinya
+                        if (val && KOTA_PROVINSI_MAP[val]) {
+                          onFormChange("provinsi", KOTA_PROVINSI_MAP[val]);
+                        }
+                      }}
+                      options={KOTA_INDONESIA}
+                      placeholder={language === "EN" ? "Select city..." : "Pilih kota..."}
+                      label="kota"
                     />
                   ) : (
-                    <p className="text-sm font-semibold text-slate-700">
+                    <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
                       {user.kota || (
-                        <span className="text-slate-400 italic">
+                        <span className="italic" style={{ color: "var(--text-muted)" }}>
                           {language === "EN" ? "Not filled" : "Belum diisi"}
                         </span>
                       )}
                     </p>
                   )}
                 </div>
-                <div className="p-4 sm:p-5 bg-slate-50/80 rounded-2xl border border-slate-100">
+
+                {/* PROVINSI */}
+                <div className="p-4 sm:p-5 rounded-2xl border" style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border-primary)" }}>
                   <div className="flex items-center gap-2 mb-3">
-                    <Building2 size={16} className="text-slate-400" />
-                    <span className="text-xs font-black uppercase tracking-widest text-slate-400">
+                    <Building2 size={16} style={{ color: "var(--text-muted)" }} />
+                    <span className="text-xs font-black uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
                       {language === "EN" ? "Province" : "Provinsi"}
                     </span>
                   </div>
                   {isEditingProfile ? (
-                    <input
-                      type="text"
+                    <LocationDropdown
                       value={profileForm.provinsi}
-                      onChange={(e) => onFormChange("provinsi", e.target.value)}
-                      placeholder={language === "EN" ? "Enter province" : "Masukkan provinsi"}
-                      className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-white text-sm font-semibold outline-none focus:border-black transition-all"
+                      onChange={(val) => onFormChange("provinsi", val)}
+                      options={PROVINSI_INDONESIA}
+                      placeholder={language === "EN" ? "Select province..." : "Pilih provinsi..."}
+                      label="provinsi"
                     />
                   ) : (
-                    <p className="text-sm font-semibold text-slate-700">
+                    <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
                       {user.provinsi || (
-                        <span className="text-slate-400 italic">
+                        <span className="italic" style={{ color: "var(--text-muted)" }}>
                           {language === "EN" ? "Not filled" : "Belum diisi"}
                         </span>
                       )}
@@ -272,10 +282,10 @@ export default function ProfileView({
               </div>
 
               {/* Website */}
-              <div className="p-4 sm:p-5 bg-slate-50/80 rounded-2xl border border-slate-100">
+              <div className="p-4 sm:p-5 rounded-2xl border" style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border-primary)" }}>
                 <div className="flex items-center gap-2 mb-3">
-                  <Globe size={16} className="text-slate-400" />
-                  <span className="text-xs font-black uppercase tracking-widest text-slate-400">
+                  <Globe size={16} style={{ color: "var(--text-muted)" }} />
+                  <span className="text-xs font-black uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
                     {language === "EN" ? "Company Website" : "Website Perusahaan"}
                   </span>
                 </div>
@@ -285,21 +295,22 @@ export default function ProfileView({
                     value={profileForm.website}
                     onChange={(e) => onFormChange("website", e.target.value)}
                     placeholder={language === "EN" ? "https://company.com" : "https://perusahaan.com"}
-                    className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-white text-sm font-semibold outline-none focus:border-black transition-all"
+                    className="w-full px-3 py-2.5 rounded-xl border outline-none transition-all text-sm font-semibold"
+                    style={{ backgroundColor: "var(--bg-input)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }}
                   />
                 ) : (
-                  <p className="text-sm font-semibold text-slate-700">
+                  <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
                     {user.website ? (
                       <a
                         href={user.website}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline flex items-center gap-1.5"
+                        className="text-blue-500 hover:underline flex items-center gap-1.5"
                       >
                         {user.website} <Globe size={13} />
                       </a>
                     ) : (
-                      <span className="text-slate-400 italic">
+                      <span className="italic" style={{ color: "var(--text-muted)" }}>
                         {language === "EN" ? "Not filled" : "Belum diisi"}
                       </span>
                     )}

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+// supabase import removed
 import { Trash2, Package, ShoppingBag, Search, ExternalLink, Filter } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -17,25 +17,32 @@ export default function DataManagement() {
   async function fetchData() {
     setLoading(true);
     const table = activeTab === "jasa" ? "paket_lelang" : "produk";
-    const { data: res } = await supabase
-      .from(table)
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(50);
-    setData(res || []);
-    setLoading(false);
+    try {
+      const res = await fetch(`/api/admin/data?table=${table}`);
+      const { data: resData, error } = await res.json();
+      if (!res.ok) throw new Error(error);
+      setData(resData || []);
+    } catch (err: any) {
+      alert("Gagal memuat data: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function deleteData(id: string) {
     if (!confirm("Hapus data ini secara permanen?")) return;
     
     const table = activeTab === "jasa" ? "paket_lelang" : "produk";
-    const { error } = await supabase.from(table).delete().eq("id", id);
     
-    if (error) {
-      alert("Gagal menghapus: " + error.message);
-    } else {
+    try {
+      const res = await fetch(`/api/admin/data?table=${table}&id=${id}`, { method: "DELETE" });
+      const { error } = await res.json();
+      
+      if (!res.ok) throw new Error(error);
+      
       setData(data.filter(item => item.id !== id));
+    } catch (err: any) {
+      alert("Gagal menghapus: " + err.message);
     }
   }
 

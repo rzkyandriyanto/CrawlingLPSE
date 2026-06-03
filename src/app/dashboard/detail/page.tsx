@@ -62,7 +62,13 @@ export default function DetailPage() {
   };
 
   return (
-    <main className="p-4 sm:p-8 md:p-10 lg:p-12 pb-24 h-full flex-1 overflow-y-auto bg-slate-50/50">
+    <main
+      className="p-4 sm:p-8 md:p-10 lg:p-12 pb-24 h-full flex-1 overflow-y-auto"
+      style={{
+        backgroundColor: "var(--bg-primary)",
+        color: "var(--text-primary)",
+      }}
+    >
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -73,17 +79,17 @@ export default function DetailPage() {
           <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-400">
             <button
               onClick={() => router.back()}
-              className="flex items-center gap-1.5 hover:text-black transition-colors"
+              className="flex items-center gap-1.5 hover:text-white transition-colors"
             >
               <ArrowLeft size={16} />
               {language === "EN" ? "Back to Dashboard" : "Kembali ke Dashboard"}
             </button>
             <ChevronRight size={14} />
-            <span className="text-slate-300 font-medium truncate max-w-[100px] sm:max-w-none">
+            <span className="text-slate-500 font-medium truncate max-w-[100px] sm:max-w-none">
               {selectedItem.kategori}
             </span>
             <ChevronRight size={14} />
-            <span className="text-black truncate max-w-[150px] sm:max-w-none">
+            <span className="truncate max-w-[150px] sm:max-w-none" style={{ color: "var(--text-primary)" }}>
               {selectedItem.nama_produk}
             </span>
           </div>
@@ -121,6 +127,61 @@ export default function DetailPage() {
               padding-top: 6px !important;
               padding-bottom: 6px !important;
             }
+          }
+
+          /* Dark theme overrides for detail page elements */
+          .dark .bg-white {
+            background-color: var(--bg-card) !important;
+          }
+          .dark .bg-slate-50 {
+            background-color: var(--bg-secondary) !important;
+          }
+          .dark .bg-slate-50\\/50 {
+            background-color: var(--bg-secondary) !important;
+          }
+          .dark .bg-blue-50 {
+            background-color: rgba(94, 106, 210, 0.15) !important;
+            color: #a5aaff !important;
+          }
+          .dark .bg-indigo-50 {
+            background-color: rgba(124, 130, 242, 0.15) !important;
+            color: #a5aaff !important;
+          }
+          .dark .border-slate-100 {
+            border-color: var(--border-primary) !important;
+          }
+          .dark .border-slate-200 {
+            border-color: var(--border-primary) !important;
+          }
+          .dark .border-slate-50 {
+            border-color: var(--border-subtle) !important;
+          }
+          .dark .text-slate-900 {
+            color: var(--text-primary) !important;
+          }
+          .dark .text-slate-800 {
+            color: var(--text-primary) !important;
+          }
+          .dark .text-slate-700 {
+            color: var(--text-secondary) !important;
+          }
+          .dark .text-slate-600 {
+            color: var(--text-secondary) !important;
+          }
+          .dark .text-black {
+            color: var(--text-primary) !important;
+          }
+          .dark .prose-slate {
+            color: var(--text-secondary) !important;
+          }
+          .dark .prose-slate h4 {
+            color: var(--text-primary) !important;
+          }
+          .dark .border-l-4.border-black {
+            border-left-color: var(--accent) !important;
+          }
+          .dark .border-b-4.border-black {
+            border-bottom-color: var(--accent) !important;
           }
         `}</style>
 
@@ -198,12 +259,47 @@ export default function DetailPage() {
               {/* Row 12 */}
               <div className="flex flex-col sm:flex-row bg-white border-b border-slate-100 p-4 sm:p-6">
                 <div className="w-full sm:w-1/4 font-black text-slate-700 text-sm mb-1 sm:mb-0">Jadwal</div>
-                <div className="w-full sm:w-3/4 font-black text-purple-600 text-sm flex items-center gap-1 cursor-pointer hover:underline"><ExternalLink size={14} /> Menuju Jadwal</div>
+                <div className="w-full sm:w-3/4 text-sm">
+                  {selectedItem.url_lpse && selectedItem.lelangId ? (
+                    <a
+                      href={`${selectedItem.url_lpse}/${selectedItem.lelangId}/pengumumanlelang`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-black text-purple-600 flex items-center gap-1 hover:underline"
+                    >
+                      <ExternalLink size={14} /> Lihat di LPSE
+                    </a>
+                  ) : (
+                    <span className="text-slate-400 italic">Tidak tersedia</span>
+                  )}
+                </div>
               </div>
               {/* Row 13 */}
               <div className="flex flex-col sm:flex-row bg-slate-50 p-4 sm:p-6">
                 <div className="w-full sm:w-1/4 font-black text-slate-700 text-sm mb-1 sm:mb-0">Sumber</div>
-                <div className="w-full sm:w-3/4 font-black text-purple-600 text-sm flex items-center gap-1 cursor-pointer hover:underline"><ExternalLink size={14} /> Menuju Sumber</div>
+                <div className="w-full sm:w-3/4 text-sm">
+                  {selectedItem.url_lpse && selectedItem.lelangId ? (
+                    <a
+                      href={`${selectedItem.url_lpse}/${selectedItem.lelangId}/pengumumanlelang`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-black text-purple-600 flex items-center gap-1 hover:underline"
+                    >
+                      <ExternalLink size={14} /> Buka Pengumuman Lelang di LPSE
+                    </a>
+                  ) : selectedItem.url_lpse ? (
+                    <a
+                      href={selectedItem.url_lpse}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-black text-purple-600 flex items-center gap-1 hover:underline"
+                    >
+                      <ExternalLink size={14} /> Buka Portal LPSE
+                    </a>
+                  ) : (
+                    <span className="text-slate-400 italic">Tidak tersedia</span>
+                  )}
+                </div>
               </div>
             </div>
 

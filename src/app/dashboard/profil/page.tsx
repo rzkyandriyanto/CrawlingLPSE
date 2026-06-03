@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useDashboard } from "../DashboardContext";
-import { supabase } from "@/lib/supabase";
+// supabase import removed
 import ProfileView from "@/components/profil/ProfileView";
 
 const DAFTAR_BIDANG = [
@@ -79,9 +79,11 @@ export default function ProfilPage() {
   const saveProfile = async () => {
     setProfileSaving(true);
     try {
-      const { error } = await supabase
-        .from("users")
-        .update({
+      const res = await fetch("/api/users/update", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: user.id,
           perusahaan: profileForm.perusahaan,
           email: profileForm.email,
           kota: profileForm.kota,
@@ -89,9 +91,10 @@ export default function ProfilPage() {
           website: profileForm.website,
           tag: profileForm.tag,
         })
-        .eq("id", user.id);
-      if (error) {
-        alert("Gagal menyimpan: " + error.message);
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert("Gagal menyimpan: " + (data.error || "Kesalahan server"));
         return;
       }
       const updatedUser = {
@@ -120,28 +123,22 @@ export default function ProfilPage() {
 
     setUploadingFoto(true);
     try {
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${user.id}-${Math.random()}.${fileExt}`;
-      const filePath = `profile-images/${fileName}`;
+      const formData = new FormData();
+      formData.append("avatar", file);
+      formData.append("userId", String(user.id));
 
-      const { error: uploadError } = await supabase.storage
-        .from("avatars")
-        .upload(filePath, file);
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
 
-      if (uploadError) throw uploadError;
+      const data = await res.json();
 
-      const { data: { publicUrl } } = supabase.storage
-        .from("avatars")
-        .getPublicUrl(filePath);
+      if (!res.ok) throw new Error(data.error || "Gagal mengunggah foto");
 
-      const { error: updateError } = await supabase
-        .from("users")
-        .update({ foto_url: publicUrl })
-        .eq("id", user.id);
+      const publicUrl = data.avatar_url;
 
-      if (updateError) throw updateError;
-
-      const updatedUser = { ...user, foto_url: publicUrl };
+      const updatedUser = { ...user, foto_url: publicUrl, avatar_url: publicUrl };
       setUser(updatedUser);
       localStorage.setItem("currentUser", JSON.stringify(updatedUser));
     } catch (err: unknown) {
@@ -166,17 +163,26 @@ export default function ProfilPage() {
   };
 
   return (
-    <main className="p-4 sm:p-8 md:p-10 lg:p-12 pb-24 h-full flex-1 overflow-y-auto">
-      <div className="bg-white -mt-4 sm:-mt-8 md:-mt-10 lg:-mt-12 -mx-4 sm:-mx-8 md:-mx-10 lg:-mx-12 px-4 sm:px-8 md:px-10 lg:px-12 pt-7 sm:pt-10 md:pt-12 lg:pt-14 pb-5 sm:pb-6 border-b border-slate-100 shadow-sm relative z-30 mb-6 sm:mb-8">
+    <main
+      className="p-4 sm:p-8 md:p-10 lg:p-12 pb-24 h-full flex-1 overflow-y-auto"
+      style={{
+        backgroundColor: "var(--bg-primary)",
+        color: "var(--text-primary)",
+      }}
+    >
+      <div className="-mt-4 sm:-mt-8 md:-mt-10 lg:-mt-12 -mx-4 sm:-mx-8 md:-mx-10 lg:-mx-12 px-4 sm:px-8 md:px-10 lg:px-12 pt-7 sm:pt-10 md:pt-12 lg:pt-14 pb-5 sm:pb-6 border-b relative z-30 mb-6 sm:mb-8" style={{ backgroundColor: "var(--bg-primary)", borderColor: "var(--border-primary)" }}>
         <header className="flex flex-col sm:flex-row sm:items-start justify-between gap-6">
           <div className="flex-1">
-            <span className="text-xs font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full mb-3 inline-block">
+            <span
+              className="text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full mb-3 inline-block border border-transparent"
+              style={{ color: "var(--accent)", backgroundColor: "var(--accent-subtle)" }}
+            >
               {language === 'EN' ? 'Profile' : 'Profil'}
             </span>
-            <h1 className="text-2xl sm:text-3xl font-black mb-2 text-black flex items-center gap-2">
+            <h1 className="text-2xl sm:text-3xl font-black mb-2 flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
               {language === 'EN' ? 'Manage Profile' : 'Kelola Profil'}
             </h1>
-            <p className="text-sm sm:text-base text-slate-500 font-medium">
+            <p className="text-sm sm:text-base font-medium" style={{ color: "var(--text-secondary)" }}>
               {language === 'EN' ? 'Update your company information and preferences.' : 'Perbarui informasi dan preferensi perusahaan Anda.'}
             </p>
           </div>

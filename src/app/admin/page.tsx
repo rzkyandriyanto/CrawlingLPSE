@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+// supabase import removed
 import { motion, AnimatePresence } from "framer-motion";
 import { Users, Package, ShoppingBag, Activity, ArrowUpRight, TrendingUp, X, Mail, Key, Building } from "lucide-react";
 
@@ -15,35 +15,46 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     async function fetchStats() {
-      const { count: userCount } = await supabase.from("users").select("*", { count: "exact", head: true });
-      const { count: jasaCount } = await supabase.from("paket_lelang").select("*", { count: "exact", head: true });
-      const { count: produkCount } = await supabase.from("produk").select("*", { count: "exact", head: true });
-
-      setStats({ users: userCount || 0, jasa: jasaCount || 0, produk: produkCount || 0 });
-      setLoading(false);
+      try {
+        const res = await fetch("/api/admin/stats");
+        if (res.ok) {
+          const data = await res.json();
+          setStats({ users: data.users || 0, jasa: data.jasa || 0, produk: data.produk || 0 });
+        }
+      } catch (err) {
+        console.error("Failed to fetch stats", err);
+      } finally {
+        setLoading(false);
+      }
     }
     fetchStats();
   }, []);
 
   const downloadCSV = async () => {
-    const { data: jasa } = await supabase.from("paket_lelang").select("*").limit(100);
-    if (!jasa || jasa.length === 0) return alert("Tidak ada data untuk didownload.");
+    try {
+      const res = await fetch("/api/admin/data?table=paket_lelang");
+      const { data: jasa } = await res.json();
+      if (!jasa || jasa.length === 0) return alert("Tidak ada data untuk didownload.");
 
-    const headers = ["ID", "Nama Paket", "Instansi", "Pagu", "HPS", "Kategori"];
-    const csvContent = [
-      headers.join(","),
-      ...jasa.map(item => [item.id, `"${item.nama_paket}"`, `"${item.instansi}"`, `"${item.pagu}"`, `"${item.hps}"`, item.kategori].join(","))
-    ].join("\n");
+      const headers = ["ID", "Nama Paket", "Instansi", "Pagu", "HPS", "Kategori"];
+      const csvContent = [
+        headers.join(","),
+        ...jasa.map((item: any) => [item.id, `"${item.nama_paket}"`, `"${item.instansi}"`, `"${item.pagu}"`, `"${item.hps}"`, item.kategori].join(","))
+      ].join("\n");
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `laporan_lelang_${new Date().toLocaleDateString()}.csv`);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `laporan_lelang_${new Date().toLocaleDateString()}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Gagal mendownload CSV:", err);
+      alert("Terjadi kesalahan saat mengunduh data.");
+    }
   };
 
   const clearCache = () => {
@@ -58,20 +69,32 @@ export default function AdminDashboard() {
     e.preventDefault();
     setIsSubmitting(true);
 
-    const { error } = await supabase.from("users").insert([
-      { ...newAdmin, role: "admin" }
-    ]);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newAdmin)
+      });
+      const data = await res.json();
 
-    setIsSubmitting(false);
-    if (error) {
-      alert("Gagal menambah admin: " + error.message);
-    } else {
-      alert("Admin Baru Berhasil Ditambahkan!");
-      setIsModalOpen(false);
-      setNewAdmin({ email: "", password: "", perusahaan: "" });
-      // Refresh stats
-      const { count } = await supabase.from("users").select("*", { count: "exact", head: true });
-      setStats(prev => ({ ...prev, users: count || 0 }));
+      setIsSubmitting(false);
+      if (!res.ok) {
+        alert("Gagal menambah admin: " + (data.error || "Kesalahan server"));
+      } else {
+        alert("Admin Baru Berhasil Ditambahkan!");
+        setIsModalOpen(false);
+        setNewAdmin({ email: "", password: "", perusahaan: "" });
+        
+        // Refresh stats
+        const statsRes = await fetch("/api/admin/stats");
+        if (statsRes.ok) {
+          const statsData = await statsRes.json();
+          setStats(prev => ({ ...prev, users: statsData.users || 0 }));
+        }
+      }
+    } catch (err: any) {
+      setIsSubmitting(false);
+      alert("Error: " + err.message);
     }
   };
 

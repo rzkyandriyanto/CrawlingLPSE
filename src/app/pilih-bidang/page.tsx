@@ -1,7 +1,7 @@
 "use client";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
+// supabase import removed
 import { useRouter } from "next/navigation";
 
 type StoredUser = {
@@ -38,12 +38,19 @@ export default function PilihBidangPage() {
     if (selectedTags.length === 0) return alert("Pilih minimal satu bidang!");
     if (!user) return;
 
-    const { error } = await supabase
-      .from("users")
-      .update({ tag: selectedTags })
-      .eq("id", user.id);
+    try {
+      const res = await fetch("/api/users/update", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: user.id, tag: selectedTags })
+      });
 
-    if (error) {
+      if (!res.ok) {
+        const errorData = await res.json();
+        alert("Gagal menyimpan: " + (errorData.error || "Kesalahan server"));
+        return;
+      }
+    } catch (error: any) {
       alert("Gagal menyimpan: " + error.message);
       return;
     }
@@ -55,13 +62,13 @@ export default function PilihBidangPage() {
   };
 
   return (
-    <div className="relative min-h-screen bg-white flex items-center justify-center px-4 py-6 sm:p-4 overflow-hidden font-sans">
+    <div className="relative min-h-screen bg-[var(--bg-primary)] flex items-center justify-center px-4 py-6 sm:p-4 overflow-hidden font-sans">
       <div
         className="absolute inset-0 z-0 pointer-events-none"
         style={{
           backgroundImage: `
-            linear-gradient(to right, rgba(0,0,0,0.07) 1px, transparent 1px),
-            linear-gradient(to bottom, rgba(0,0,0,0.07) 1px, transparent 1px)
+            linear-gradient(to right, var(--border-primary) 1px, transparent 1px),
+            linear-gradient(to bottom, var(--border-primary) 1px, transparent 1px)
           `,
           backgroundSize: "40px 40px",
           maskImage:
@@ -73,16 +80,16 @@ export default function PilihBidangPage() {
         initial={{ opacity: 0, y: 28, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
-        className="relative z-10 w-full max-w-2xl rounded-[1.8rem] sm:rounded-[2.5rem] border border-slate-200 bg-white/90 p-5 sm:p-8 shadow-[0_20px_60px_rgba(15,23,42,0.12)] backdrop-blur-sm"
+        className="relative z-10 w-full max-w-2xl rounded-[1.8rem] sm:rounded-[2.5rem] border border-[var(--border-primary)] bg-[var(--bg-card)]/90 p-5 sm:p-8 shadow-[0_20px_60px_rgba(0,0,0,0.12)] backdrop-blur-sm"
       >
         <div className="text-center mb-5 sm:mb-8">
-          <p className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 mb-3 sm:mb-4">
+          <p className="inline-flex items-center rounded-full border border-[var(--border-primary)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-[var(--text-secondary)] mb-3 sm:mb-4">
             Personalisasi Preferensi
           </p>
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-[var(--text-primary)] tracking-tight">
             Pilih Bidang
           </h2>
-          <p className="text-slate-500 mt-1 sm:mt-2 text-xs sm:text-sm md:text-base">
+          <p className="text-[var(--text-secondary)] mt-1 sm:mt-2 text-xs sm:text-sm md:text-base">
             Pilihan bidang ini dipakai untuk membatasi hasil produk dan jasa.
           </p>
         </div>
@@ -102,8 +109,8 @@ export default function PilihBidangPage() {
                   relative overflow-hidden rounded-xl sm:rounded-2xl border-2 p-3 sm:p-4 text-left transition-all duration-300
                   ${
                     isSelected
-                      ? "border-black bg-black text-white shadow-xl shadow-black/20"
-                      : "border-slate-100 bg-white hover:border-slate-300 text-slate-700"
+                      ? "border-[var(--accent)] bg-[var(--accent)] text-white shadow-xl shadow-[var(--accent)]/20"
+                      : "border-[var(--border-primary)] bg-[var(--bg-input)] hover:border-[var(--accent)] text-[var(--text-primary)]"
                   }
                 `}
               >
@@ -115,19 +122,19 @@ export default function PilihBidangPage() {
                       opacity: isSelected ? 1 : 0.35,
                     }}
                     className={`h-6 w-6 rounded-full border-2 flex items-center justify-center ${
-                      isSelected ? "border-white bg-white/15" : "border-slate-300"
+                      isSelected ? "border-white bg-white/15" : "border-[var(--border-primary)]"
                     }`}
                   >
                     <span
                       className={`h-2.5 w-2.5 rounded-full ${
-                        isSelected ? "bg-white" : "bg-slate-300"
+                        isSelected ? "bg-white" : "bg-[var(--border-primary)]"
                       }`}
                     />
                   </motion.span>
                 </div>
                 <p
                   className={`mt-2 text-xs ${
-                    isSelected ? "text-white/80" : "text-slate-400"
+                    isSelected ? "text-white/80" : "text-[var(--text-muted)]"
                   }`}
                 >
                   Fokuskan rekomendasi sesuai bidang ini.
@@ -141,7 +148,7 @@ export default function PilihBidangPage() {
           onClick={handleSimpan}
           whileHover={{ y: -1, scale: 1.005 }}
           whileTap={{ scale: 0.985 }}
-          className="w-full rounded-2xl bg-black py-3.5 sm:py-4 font-bold text-white shadow-xl shadow-black/20 transition-all hover:bg-slate-800 text-sm sm:text-base"
+          className="w-full rounded-2xl bg-[var(--accent)] py-3.5 sm:py-4 font-bold text-white shadow-xl shadow-[var(--accent)]/20 transition-all hover:bg-[var(--accent-hover)] text-sm sm:text-base"
         >
           {selectedTags.length > 0
             ? `SIMPAN ${selectedTags.length} BIDANG & LANJUTKAN`

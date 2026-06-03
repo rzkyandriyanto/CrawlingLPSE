@@ -1,25 +1,130 @@
 @import "tailwindcss";
 
-@theme {
-  /* Daftarkan variabel warna */
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  
-  /* Tambahkan durasi transisi ke tema v4 */
-  --transition-duration-300: 300ms;
-  --transition-duration-500: 500ms;
-}
+
+/* ============================================
+   DESIGN TOKENS — LINEAR APP STYLE
+   ============================================ */
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Background */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f7f8f9;
+  --bg-tertiary: #f0f1f3;
+  --bg-card: #ffffff;
+  --bg-sidebar: #0d1527;
+  --bg-sidebar-hover: rgba(255,255,255,0.07);
+  --bg-sidebar-active: rgba(255,255,255,0.12);
+  --bg-input: #f7f8f9;
+  --bg-badge: #f0f1f3;
+
+  /* Text */
+  --text-primary: #1a1a2e;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --text-sidebar: #a0a4ae;
+  --text-sidebar-active: #ffffff;
+
+  /* Border */
+  --border-primary: #e8eaed;
+  --border-subtle: #f0f1f3;
+  --border-sidebar: rgba(255,255,255,0.08);
+
+  /* Accent — Linear-style indigo/violet */
+  --accent: #5e6ad2;
+  --accent-hover: #4d57c7;
+  --accent-subtle: #eef0fd;
+  --accent-text: #5e6ad2;
+
+  /* Status colors */
+  --green-subtle: #f0fdf4;
+  --green-border: #bbf7d0;
+  --green-text: #16a34a;
+  --blue-subtle: #eff6ff;
+  --blue-border: #bfdbfe;
+  --blue-text: #2563eb;
+  --amber-subtle: #fffbeb;
+  --amber-border: #fde68a;
+  --amber-text: #d97706;
+  --red-subtle: #fef2f2;
+  --red-border: #fecaca;
+  --red-text: #dc2626;
 }
 
-/* Memastikan semua class transition dan transform tersedia */
+/* ============================================
+   DARK MODE TOKENS
+   ============================================ */
+.dark {
+  /* Background */
+  --bg-primary: #000000;
+  --bg-secondary: #0a0b0d;
+  --bg-tertiary: #141519;
+  --bg-card: #0a0b0d;
+  --bg-sidebar: #0d1527;
+  --bg-sidebar-hover: rgba(255,255,255,0.04);
+  --bg-sidebar-active: rgba(255,255,255,0.08);
+  --bg-input: #0a0b0d;
+  --bg-badge: #141519;
+
+  /* Text */
+  --text-primary: #e2e4e9;
+  --text-secondary: #8b909a;
+  --text-muted: #6b7280;
+  --text-sidebar: #8b909a;
+  --text-sidebar-active: #ffffff;
+
+  /* Border */
+  --border-primary: #17181c;
+  --border-subtle: #121214;
+  --border-sidebar: rgba(255,255,255,0.05);
+
+  /* Accent */
+  --accent: #7c82f2;
+  --accent-hover: #6970ee;
+  --accent-subtle: #1e2044;
+  --accent-text: #a5aaff;
+
+  /* Status colors */
+  --green-subtle: #052e16;
+  --green-border: #166534;
+  --green-text: #4ade80;
+  --blue-subtle: #0c1a33;
+  --blue-border: #1e40af;
+  --blue-text: #60a5fa;
+  --amber-subtle: #1c0a00;
+  --amber-border: #78350f;
+  --amber-text: #fbbf24;
+  --red-subtle: #1c0505;
+  --red-border: #7f1d1d;
+  --red-text: #f87171;
+}
+
+/* ============================================
+   BASE STYLES
+   ============================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  transition: color-scheme 0.2s;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', 'Plus Jakarta Sans', Arial, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
 @utility transition-all {
   transition-property: all;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 300ms;
+  transition-duration: 200ms;
 }
 
 @utility scale-105 {
@@ -30,8 +135,31 @@
   transform: scale(0.95);
 }
 
-body {
-  background-color: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Smooth scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Icon micro-animation keyframe */
+@keyframes icon-pop {
+  0%   { transform: scale(1) rotate(0deg); }
+  40%  { transform: scale(1.18) rotate(-4deg); }
+  70%  { transform: scale(1.08) rotate(2deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+.icon-animate:hover svg,
+.icon-animate:hover .lucide {
+  animation: icon-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }

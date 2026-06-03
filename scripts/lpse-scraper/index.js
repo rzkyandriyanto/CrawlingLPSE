@@ -1,211 +1,622 @@
+/**
+ * LPSE Multi-Daerah Scraper — v4 (Puppeteer + DOM Scraping)
+ * ══════════════════════════════════════════════════════════════════════════
+ * Strategi:
+ *  1. Buka halaman /{slug}/lelang dengan Puppeteer
+ *  2. Baca tabel HTML langsung dari DOM (Next.js SSR, tidak ada XHR JSON)
+ *  3. Simpan data ke MongoDB dengan upsert
+ *  4. Agenda.js untuk scraping berkala (interval 2 jam agar tidak overlap)
+ *
+ * LPSE daftar: 400+ dari seluruh Indonesia (lpse-list.js)
+ * ══════════════════════════════════════════════════════════════════════════
+ */
+
 require("dotenv").config({ path: ".env.local" });
 const puppeteer = require("puppeteer-extra");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
-const { createClient } = require("@supabase/supabase-js");
+const mongoose = require("mongoose");
+const Agenda = require("agenda");
+const nodemailer = require("nodemailer");
+const { buildDailyDigestHtml } = require("./email-template");
+const { LPSE_LIST } = require("./lpse-list");
 
 puppeteer.use(StealthPlugin());
 
-// Konfigurasi Supabase
-// Gunakan process.env dari .env.local aplikasi Next.js Anda
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-// Anda bisa gunakan ANON_KEY jika RLS di mode PUBLIC INSERT, atau SERVICE_ROLE_KEY untuk amannya.
-const supabase = createClient(supabaseUrl, supabaseKey);
+// ════════════════════════════════════════════════════════════════
+// KONFIGURASI
+// ════════════════════════════════════════════════════════════════
+const MONGO_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/seleno_db";
+const BASE_DOMAIN = "https://spse.inaproc.id";
+const PAGES_PER_LPSE = 3;           // Halaman tabel per LPSE (25 paket/halaman)
+const PAGE_WAIT_MS = 4000;          // Tunggu setelah load halaman (Next.js butuh lebih lama)
+const BROWSER_CONCURRENCY = 3;      // Berapa browser paralel (hati-hati RAM)
+const NAV_TIMEOUT = 45000;          // Dinaikkan dari 25s → 45s untuk Next.js SSR
+const CURRENT_YEAR = new Date().getFullYear();
 
-function extractDataFromHtml(htmlString) {
-  if (!htmlString) return "";
-  return htmlString.replace(/<[^>]*>?/gm, "").trim();
+// ════════════════════════════════════════════════════════════════
+// MONGODB
+// ════════════════════════════════════════════════════════════════
+const TenderSchema = new mongoose.Schema({
+  lelangId:          { type: String, required: true, unique: true },
+  nama_paket:        { type: String, required: true },
+  instansi:          String,
+  hps:               String,
+  pagu:              String,
+  kategori:          String,
+  tag:               String,
+  metode_pengadaan:  String,
+  wilayah:           String,
+  url_lpse:          String,
+  jadwal:            [{ tahap: String, mulai: String, sampai: String, perubahan: String }],
+  pinned_by_users:   { type: [String], default: [] },
+  finished_at:       { type: Date },
+  ai_summary:        { type: String, default: null },
+  ai_summary_at:     { type: Date, default: null },
+  status:            { type: String, enum: ["aktif","gagal","selesai","menang"], default: "aktif", index: true },
+  archived_at:       { type: Date, default: null },
+  archived_reason:   { type: String, default: null },
+  archived_by:       { type: String, default: null },
+
+  // ── Field baru dari halaman /pengumumanlelang ──────────────────
+  kode_rup:          String,
+  sumber_dana:       String,
+  url_dok_uraian:    String,
+  tanggal_pembuatan: String,
+  tahap_saat_ini:    String,
+  satuan_kerja:      String,
+  jenis_pengadaan:   String,
+  tahun_anggaran:    String,
+  jenis_kontrak:     String,
+  lokasi_pekerjaan:  String,
+  kualifikasi_usaha: String,
+  syarat_kualifikasi:String,
+  jumlah_peserta:    Number,
+  info_synced_at:    Date,
+  url_hasil_evaluasi:String,
+  url_pemenang:      String,
+  url_syarat_kualifikasi: String,
+  
+  // ── Field Scraping Pemenang & Evaluasi (Jika Selesai) ────────────
+  pemenang_nama:     String,
+  pemenang_alamat:   String,
+  pemenang_npwp:     String,
+  pemenang_harga:    String,
+  peserta_evaluasi:  [{
+    nama: String,
+    harga_penawaran: String,
+    harga_terkoreksi: String,
+    skor_teknis: String,
+    lulus: Boolean,
+    alasan_gagal: String
+  }],
+}, { timestamps: true });
+
+const TenderModel = mongoose.models?.Tender || mongoose.model("Tender", TenderSchema);
+
+// ── User Model (ringkas, hanya yang dibutuhkan) ──────────────────────────────
+const UserSchema = new mongoose.Schema({
+  username: String,
+  email: { type: String, required: true },
+  nama_lengkap: { type: String, default: "" },
+  perusahaan: { type: String, default: "" },
+  provinsi: { type: String, default: "" },
+  bidang_minat: { type: [String], default: [] },
+  search_history: { type: [String], default: [] },
+}, { timestamps: true });
+const UserModel = mongoose.models?.User || mongoose.model("User", UserSchema);
+
+// ── Pending Email Notif (antrian digest harian) ──────────────────────────────
+const PendingEmailSchema = new mongoose.Schema({
+  userId:     { type: String, required: true, index: true },
+  userEmail:  { type: String, required: true },
+  userName:   { type: String, default: "" },
+  tenderId:   { type: String, required: true },
+  tenderName: String,
+  instansi:   String,
+  wilayah:    String,
+  pagu:       String,
+  score:      Number,
+}, { timestamps: true });
+const PendingEmailModel = mongoose.models?.PendingEmailNotif || mongoose.model("PendingEmailNotif", PendingEmailSchema);
+
+const agenda = new Agenda({ db: { address: MONGO_URI, collection: "agendaJobs" } });
+
+// ════════════════════════════════════════════════════════════════
+// UTILITAS
+// ════════════════════════════════════════════════════════════════
+function stripHtml(html) {
+  return String(html || "").replace(/<[^>]*>?/gm, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim();
 }
 
-// Sistem Auto-Klasifikasi Bidang berdasarkan keyword di nama paket
-// Tag HARUS SAMA PERSIS dengan DAFTAR_BIDANG di src/app/pilih-bidang/page.tsx
-function classifyPaket(namaPaket) {
-  const nama = (namaPaket || "").toLowerCase();
-
-  const bidangMap = [
-    {
-      tag: "Teknologi",
-      kategori: "Pengadaan Barang",
-      keywords: ["sistem informasi", "aplikasi", "software", "hardware", "server", "jaringan", "komputer", "laptop", "printer", "teknologi", "internet", "website", "bandwidth", "data center", "cloud", "cctv", "kamera", "wifi", "network", "it ", "digital"]
-    },
-    {
-      tag: "Konstruksi",
-      kategori: "Pekerjaan Konstruksi",
-      keywords: ["pembangunan", "konstruksi", "jalan", "jembatan", "gedung", "rehabilitasi", "renovasi", "drainase", "irigasi", "saluran", "talud", "trotoar", "lantai", "atap", "pondasi", "bendungan", "tanggul", "gorong-gorong", "dermaga", "pelabuhan", "terminal", "penataan"]
-    },
-    {
-      tag: "Kesehatan",
-      kategori: "Pengadaan Barang",
-      keywords: ["kesehatan", "medis", "obat", "alat kesehatan", "rumah sakit", "puskesmas", "klinik", "vaksin", "laboratorium", "radiologi", "ambulans", "farmasi", "apotek", "dokter", "bidan", "perawat"]
-    },
-    {
-      tag: "Pangan",
-      kategori: "Pengadaan Barang",
-      keywords: ["pertanian", "pangan", "beras", "pupuk", "benih", "nelayan", "perikanan", "ternak", "perkebunan", "holtikultura", "pangan", "makanan", "catering", "konsumsi", "makan"]
-    },
-    {
-      tag: "Logistik",
-      kategori: "Jasa Lainnya",
-      keywords: ["logistik", "pengiriman", "distribusi", "transportasi", "pergudangan", "gudang", "kendaraan", "truk", "angkutan", "ekspedisi", "cargo"]
-    },
-    {
-      tag: "Otomotif",
-      kategori: "Pengadaan Barang",
-      keywords: ["kendaraan dinas", "mobil", "motor", "bus", "pickup", "ambulans", "pemadam", "derek", "otomotif", "spare part kendaraan", "bengkel", "servis kendaraan"]
-    }
+function classifyPaket(nama) {
+  const n = (nama || "").toLowerCase();
+  const map = [
+    { tag: "Teknologi & Informasi", kw: ["sistem informasi","aplikasi","software","hardware","server","jaringan","komputer","laptop","internet","website","cloud","cctv","wifi"," it ","digital","fiber optic","bandwidth","perangkat lunak","perangkat keras","lisensi","kamera","vtron","komunikasi"] },
+    { tag: "Konstruksi", kw: ["pembangunan","konstruksi","jalan","jembatan","gedung","rehabilitasi","renovasi","drainase","irigasi","saluran","talud","trotoar","pondasi","bendungan","tanggul","gorong","dermaga","pengaspalan","rigid","box culvert","perkerasan","bronjong","aspal","peningkatan","pemeliharaan","paving","taman","pagar","plengsengan","normalisasi","siring","rehab","bangunan","fasilitas","infrastruktur"] },
+    { tag: "Kesehatan & Medis", kw: ["kesehatan","medis","obat","alat kesehatan","rumah sakit","puskesmas","klinik","vaksin","laboratorium","radiologi","ambulans","farmasi","apotek","imunisasi","alkes","bmhp","reagen","kedokteran","stunting","gizi"] },
+    { tag: "Pangan & Pertanian", kw: ["pertanian","pangan","beras","pupuk","benih","bibit","nelayan","perikanan","ternak","perkebunan","makanan","catering","konsumsi","makan siang","sapi","kambing","unggas","traktor","nelayan","kapal penangkap","pakan","hewan","sayur"] },
+    { tag: "Konsultansi & Perencanaan", kw: ["jasa konsultansi","konsultan","perencana","pengawasan","supervisi","manajemen proyek","studi kelayakan","amdal","masterplan","ded ","desain","kajian","penyusunan","dokumen","naskah akademik","detail engineering"] },
+    { tag: "Pendidikan & Pelatihan", kw: ["pendidikan","sekolah","pelatihan","buku","alat tulis","meja belajar","kursi sekolah","perpustakaan","bimtek","diklat","bimbingan teknis","alat peraga","laboratorium bahasa","siswa","guru","pengajar","modul"] },
+    { tag: "Transportasi & Otomotif", kw: ["kendaraan dinas","mobil","motor","bus","pickup","pemadam kebakaran","derek","angkutan","speedboat","perahu","kapal","truk","roda empat","roda dua","ban","suku cadang","kendaraan"] },
+    { tag: "Logistik & Ekspedisi", kw: ["logistik","pengiriman","distribusi","cargo","jasa angkut","bongkar muat","kurir"] },
+    { tag: "Fasilitas & Jasa Umum", kw: ["kebersihan","keamanan","cleaning service","security","satuan pengamanan","event organizer","pameran","jasa sewa","cetak","penggandaan","baliho","spanduk","seragam","pakaian","furniture","mebel","atk","sewa","pengadaan jasa","makan minum","alat tulis kantor","peralatan","perlengkapan"] }
   ];
-
-  for (const bidang of bidangMap) {
-    for (const kw of bidang.keywords) {
-      if (nama.includes(kw)) {
-        return { tag: bidang.tag, kategori: bidang.kategori };
+  for (const b of map) {
+    for (const kw of b.kw) {
+      if (n.includes(kw)) {
+        return { tag: b.tag, kategori: "Jasa" };
       }
     }
   }
-
-  // Default: Konstruksi karena mayoritas lelang pemerintah adalah infrastruktur
-  return { tag: "Konstruksi", kategori: "Pekerjaan Konstruksi" };
+  return { tag: "Lainnya", kategori: "Lainnya" };
 }
 
-async function scrapeLpse(targetUrl, kotaName) {
-  console.log(`\n[SPSE] Memulai Robot Scraper untuk: ${kotaName}`);
-  console.log(`[SPSE] Menghubungkan ke ${targetUrl}...`);
+// Simpan batch ke MongoDB
+async function saveBatch(items) {
+  if (!items.length) return { inserted: 0, updated: 0 };
+  
+  let insertedCount = 0;
+  let updatedCount = 0;
 
-  const browser = await puppeteer.launch({
-    headless: false, // Membuka jendela Chrome sungguhan agar Cloudflare percaya ini manusia
-    ignoreHTTPSErrors: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--ignore-certificate-errors",
-      "--ignore-certificate-errors-spki-list",
-      "--disable-web-security"
-    ],
-  });
-
-  const page = await browser.newPage();
-
-  // Set custom user agent untuk aman
-  await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-
-  let lelangData = [];
-
-  // Menangkap request JSON yang dilakukan oleh Datatables SPSE di background!
-  page.on("response", async (response) => {
-    const url = response.url();
-    if (url.includes("dt/lelang")) {
-      try {
-        const json = await response.json();
-        if (json && json.data) {
-          console.log(`[SPSE] Berhasil menyadap JSON API: Menemukan ${json.data.length} paket lelang.`);
-
-          for (const row of json.data) {
-            // Urutan array JSON SPSE: [0: id/no, 1: nama_paket(HTML), 2: instansi, 3: Tahapan, 4: HPS, 5: ....]
-            // Format ini bisa sedikit beda antar versi SPSE, tapi umumnya sama.
-
-            const namaPaketRaw = row[1];
-            // Ekstrak ID pengadaan dari URL jika ada
-            const idMatch = namaPaketRaw ? namaPaketRaw.match(/lelang\/(\d+)\/pengumumanlelang/) : null;
-            const lelangId = idMatch ? idMatch[1] : `PKG-${Date.now()}-${Math.random()}`;
-
-            const namaPaket = extractDataFromHtml(row[1]);
-            const instansi = extractDataFromHtml(row[2]);
-            const tahapan = extractDataFromHtml(row[3]);
-            const hps = extractDataFromHtml(row[4]);
-
-            // Auto-klasifikasi bidang berdasarkan nama paket
-            const { tag, kategori } = classifyPaket(namaPaket);
-
-            lelangData.push({
-              nama_paket: namaPaket || "Paket Tanpa Nama",
-              instansi: instansi || kotaName,
-              hps: hps || "Rp 0",
-              pagu: hps || "Rp 0",
-              kategori,
-              tag,
-              metode_pengadaan: tahapan || "Tender Terbuka",
-              wilayah: kotaName,
-              url_lpse: targetUrl,
-            });
-          }
-        }
-      } catch (e) {
-        console.log(`[SPSE] Error saat parsing response data:`, e.message);
-      }
+  for (const row of items) {
+    const existing = await TenderModel.findOne({ lelangId: row.lelangId }).select("archived_at").lean();
+    
+    // Set archived_at if status is selesai and no archived_at yet
+    if (row.status === "selesai" && (!existing || !existing.archived_at)) {
+      row.archived_at = new Date();
+      row.finished_at = new Date();
+      row.archived_reason = "Tender telah selesai";
     }
-  });
+
+    const result = await TenderModel.updateOne(
+      { lelangId: row.lelangId },
+      { $set: row },
+      { upsert: true }
+    );
+    
+    if (result.upsertedCount > 0) {
+      insertedCount++;
+    } else if (result.modifiedCount > 0) {
+      updatedCount++;
+    }
+  }
+  return { inserted: insertedCount, updated: updatedCount };
+}
+
+// ════════════════════════════════════════════════════════════════
+// SCRAPER SATU LPSE — v4 (DOM Scraping Next.js)
+// ════════════════════════════════════════════════════════════════
+async function scrapeSingleLpse(lpse, browser) {
+  let slug;
+  try {
+    const u = new URL(lpse.url.startsWith("http") ? lpse.url : `https://${lpse.url}`);
+    slug = u.hostname === "spse.inaproc.id"
+      ? u.pathname.replace(/^\//, "").split("/")[0]
+      : u.hostname.replace(".go.id", "").replace("lpse.", "").replace("spse.", "");
+  } catch {
+    return [];
+  }
+
+  const listUrl = `${BASE_DOMAIN}/${slug}/lelang`;
+  const collectedRows = [];
 
   try {
-    // Navigasi ke halaman utama lelang dan tunggu jaringan stabil
-    await page.goto(targetUrl, { waitUntil: "networkidle2", timeout: 30000 });
+    const page = await browser.newPage();
+    await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+    await page.setExtraHTTPHeaders({ "Accept-Language": "id-ID,id;q=0.9" });
 
-    // Tunggu konten dimuat secara umum
-    try {
-      console.log(`[SPSE] Menunggu halaman dimuat... (Anda punya 60 detik jika ada Captcha)`);
-      await page.waitForSelector("table, .table, tbody", { timeout: 60000 });
-      // Berikan waktu ekstra 5 detik untuk event on('response') menangkap dan menerjemahkan JSON
-      await new Promise(resolve => setTimeout(resolve, 5000));
-    } catch (err) {
-      console.log(`[SPSE] Element tabel tidak terdeteksi dalam 60 detik.`);
+    await page.goto(listUrl, { waitUntil: "networkidle2", timeout: NAV_TIMEOUT });
+    await new Promise(r => setTimeout(r, PAGE_WAIT_MS));
+
+    for (let p = 0; p < PAGES_PER_LPSE; p++) {
+      const rows = await page.evaluate((slug, baseDomain) => {
+        const results = [];
+        const tableRows = Array.from(document.querySelectorAll("table tbody tr, tbody tr"));
+
+        for (const tr of tableRows) {
+          const cells = Array.from(tr.querySelectorAll("td"));
+          if (cells.length < 3) continue;
+
+          const kodeCell = cells[0];
+          const lelangId = kodeCell?.innerText?.trim().replace(/\D/g, "") || "";
+          if (!lelangId || lelangId.length < 5) continue;
+
+          const namaCell = cells[1];
+          const cellText = namaCell?.innerHTML?.toLowerCase() || "";
+          const isBatalGagal = (cellText.includes("tender batal") || cellText.includes("tender gagal") || (cellText.includes("label-danger") && (cellText.includes("batal") || cellText.includes("gagal"))));
+          if (isBatalGagal) continue;
+
+          const linkEl = namaCell?.querySelector("a");
+          const namaPaket = linkEl?.innerText?.trim() || namaCell?.querySelector("div, span, p")?.innerText?.trim() || "";
+          if (!namaPaket || namaPaket.length < 5) continue;
+
+          const allLines = namaCell?.innerText?.split("\n").map(s => s.trim()).filter(Boolean) || [];
+          const metodeLine = allLines.find(l => l.toLowerCase().includes("tender") || l.toLowerCase().includes("seleksi") || l.toLowerCase().includes("pengadaan")) || "";
+          const instansi = cells[2]?.innerText?.trim() || "";
+          const tahapan = cells[3]?.innerText?.trim() || "";
+          const hpsRaw = cells[4]?.innerText?.trim() || "N/A";
+
+          results.push({ lelangId, nama_paket: namaPaket, instansi, tahap_saat_ini: tahapan, hps: hpsRaw, metode_detail: metodeLine, url_lpse: `${baseDomain}/${slug}` });
+        }
+        return results;
+      }, slug, BASE_DOMAIN);
+
+      for (const row of rows) {
+        const { tag, kategori } = classifyPaket(row.nama_paket);
+        
+        const tahapStr = (row.tahap_saat_ini || "").toLowerCase();
+        const isFinished = tahapStr.includes("selesai") || tahapStr.includes("pemenang");
+        
+        const payload = {
+          lelangId:         row.lelangId,
+          nama_paket:       row.nama_paket,
+          instansi:         row.instansi || lpse.nama,
+          hps:              row.hps,
+          pagu:             row.hps,
+          kategori,
+          tag,
+          metode_pengadaan: row.metode_detail || "Tender",
+          tahap_saat_ini:   row.tahap_saat_ini,
+          wilayah:          lpse.nama,
+          url_lpse:         row.url_lpse,
+        };
+
+        if (isFinished) {
+          payload.status = "selesai";
+          // Jika background scraper yang pertama kali deteksi, catat finished_at
+          // Nanti sync-info akan memperbarui dengan hasil evaluasi
+        }
+
+        collectedRows.push(payload);
+      }
+
+      if (p < PAGES_PER_LPSE - 1) {
+        try {
+          const nextBtn = await page.$("button[aria-label='Next'], a[aria-label='Next'], li.next:not(.disabled) a");
+          if (!nextBtn) break;
+          const isDisabled = await page.evaluate(el => el.disabled || el.classList.contains("disabled") || el.closest("li")?.classList.contains("disabled"), nextBtn);
+          if (isDisabled) break;
+          await nextBtn.click();
+          await new Promise(r => setTimeout(r, PAGE_WAIT_MS));
+        } catch { break; }
+      }
     }
+    await page.close();
+  } catch (err) {
+    process.stderr.write(`\n  ✗ ${lpse.nama}: ${err.message.substring(0, 80)}\n`);
+  }
+  return collectedRows;
+}
 
-  } catch (error) {
-    console.error("[SPSE] Terjadi kesalahan saat membuka halaman:", error);
+// ════════════════════════════════════════════════════════════════
+// BATCH SCRAPER
+// ════════════════════════════════════════════════════════════════
+async function scrapeBatch(batch, progressObj) {
+  const browser = await puppeteer.launch({
+    headless: true,
+    ignoreHTTPSErrors: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--ignore-certificate-errors", "--disable-web-security"],
+  });
+  try {
+    for (const lpse of batch) {
+      const startTime = Date.now();
+      const items = await scrapeSingleLpse(lpse, browser);
+      progressObj.done++;
+      const timeSec = ((Date.now() - startTime) / 1000).toFixed(1);
+      const lpName = lpse.nama.padEnd(40, " ");
+      if (items.length > 0) {
+        const { inserted, updated } = await saveBatch(items);
+        progressObj.inserted += inserted;
+        progressObj.updated += updated;
+        console.log(`[✓] ${lpName} | +${String(inserted).padEnd(3, " ")} baru | ~${String(updated).padEnd(3, " ")} update | ${timeSec}s`);
+      } else {
+        progressObj.failed++;
+        console.log(`[!] ${lpName} | Kosong / Gagal             | ${timeSec}s`);
+      }
+    }
   } finally {
     await browser.close();
-    console.log(`[SPSE] Robot Scraper selesai bekerja.`);
   }
-
-  return lelangData;
 }
 
-async function run() {
-  // Daftar lengkap/banyak target LPSE (Kementerian, Provinsi, dan Kota Besar)
-  const LpseList = [
-    { nama: "LPSE LKPP Nasional", url: "https://spse.inaproc.id/lkpp/lelang" },
-    { nama: "Kementerian PUPR", url: "https://spse.inaproc.id/pupr/lelang" },
-    { nama: "Kementerian Kesehatan", url: "https://spse.inaproc.id/kemkes/lelang" },
-    { nama: "Kementerian Keuangan", url: "https://spse.inaproc.id/kemenkeu/lelang" },
-    { nama: "Kementerian Pendidikan", url: "https://spse.inaproc.id/kemdikbud/lelang" },
-    { nama: "LPSE Provinsi DKI Jakarta", url: "https://spse.inaproc.id/dki/lelang" },
-    { nama: "LPSE Provinsi Jawa Barat", url: "https://spse.inaproc.id/jabarprov/lelang" },
-    { nama: "LPSE Provinsi Jawa Tengah", url: "https://spse.inaproc.id/jatengprov/lelang" },
-    { nama: "LPSE Provinsi Jawa Timur", url: "https://spse.inaproc.id/jatimprov/lelang" },
-    { nama: "LPSE Provinsi Banten", url: "https://spse.inaproc.id/bantenprov/lelang" },
-    { nama: "LPSE Provinsi Bali", url: "https://spse.inaproc.id/baliprov/lelang" },
-    { nama: "LPSE Provinsi Sumatera Utara", url: "https://spse.inaproc.id/sumutprov/lelang" },
-    { nama: "LPSE Kota Bekasi", url: "https://spse.inaproc.id/bekasikota/lelang" },
-    { nama: "LPSE Kota Bandung", url: "https://spse.inaproc.id/kotabandung/lelang" },
-    { nama: "LPSE Kota Surabaya", url: "https://spse.inaproc.id/surabaya/lelang" },
-    { nama: "LPSE Kota Semarang", url: "https://spse.inaproc.id/semarangkota/lelang" },
-    { nama: "LPSE Kota Bogor", url: "https://spse.inaproc.id/kotabogor/lelang" },
-    { nama: "LPSE Kota Depok", url: "https://spse.inaproc.id/depok/lelang" },
-    { nama: "LPSE Kota Tangerang", url: "https://spse.inaproc.id/tangerangkota/lelang" },
-    { nama: "LPSE Kota Medan", url: "https://spse.inaproc.id/pemkomedan/lelang" },
-    { nama: "LPSE Kabupaten Bogor", url: "https://spse.inaproc.id/bogorkab/lelang" },
-    { nama: "LPSE Kabupaten Bekasi", url: "https://spse.inaproc.id/bekasikab/lelang" }
-  ];
+// ════════════════════════════════════════════════════════════════
+// AGENDA JOBS
+// ════════════════════════════════════════════════════════════════
+agenda.define("scrape all lpse", async () => {
+  const t0 = Date.now();
+  console.log(`\n${"═".repeat(65)}`);
+  console.log(`📡  SCRAPE ${LPSE_LIST.length} LPSE SELURUH INDONESIA`);
+  console.log(`    Parallel browsers: ${BROWSER_CONCURRENCY} | Halaman/LPSE: ${PAGES_PER_LPSE}`);
+  console.log(`${"═".repeat(65)}`);
 
-  for (const lpse of LpseList) {
-    const dataTertarik = await scrapeLpse(lpse.url, lpse.nama);
+  const LPSE_PER_BROWSER = Math.ceil(LPSE_LIST.length / BROWSER_CONCURRENCY);
+  const batches = [];
+  for (let i = 0; i < LPSE_LIST.length; i += LPSE_PER_BROWSER) batches.push(LPSE_LIST.slice(i, i + LPSE_PER_BROWSER));
 
-    if (dataTertarik.length > 0) {
-      console.log(`[SUPABASE] Bersiap mengunggah ${dataTertarik.length} rekaman ke tabel paket_lelang...`);
+  const progressObj = { done: 0, inserted: 0, updated: 0, failed: 0 };
+  await Promise.allSettled(batches.map(batch => scrapeBatch(batch, progressObj)));
 
-      const { data, error } = await supabase
-        .from("paket_lelang")
-        .insert(dataTertarik);
+  const elapsed = ((Date.now() - t0) / 1000 / 60).toFixed(1);
+  console.log(`\n${"═".repeat(65)}`);
+  console.log(`✅  Selesai ${elapsed} menit`);
+  console.log(`    Data baru: ${progressObj.inserted} | Update: ${progressObj.updated} | Gagal: ${progressObj.failed}`);
+  console.log(`${"═".repeat(65)}\n`);
+});
 
-      if (error) {
-        console.error(`[SUPABASE] Gagal mengunggah data:`, error.message);
-      } else {
-        console.log(`[SUPABASE] Sukses! Data '${lpse.nama}' berhasil disimpan ke Database.`);
+agenda.define("sync jadwal aktif", async () => {
+  console.log(`\n📅  Sync jadwal tender aktif...`);
+  const tenders = await TenderModel.find({ url_lpse: { $exists: true, $ne: "" }, lelangId: { $not: /^PKG-/ }, status: "aktif" }).select("lelangId url_lpse").lean();
+  let synced = 0;
+  const browser = await puppeteer.launch({ headless: true, ignoreHTTPSErrors: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+  for (const tender of tenders) {
+    try {
+      const { url_lpse, lelangId } = tender;
+      const slug = new URL(url_lpse).pathname.replace(/^\//, "").split("/")[0] || url_lpse.split("/")[3];
+      const jadwalUrl = `${BASE_DOMAIN}/${slug}/lelang/${lelangId}/jadwal`;
+      const page = await browser.newPage();
+      await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+      await page.goto(jadwalUrl, { waitUntil: "networkidle2", timeout: 45000 });
+      await new Promise(r => setTimeout(r, 2000)); // Tambahan delay kecil agar page render
+
+      const jadwalRows = await page.evaluate(() => {
+        const trs = Array.from(document.querySelectorAll("table.table tbody tr, table tbody tr"));
+        return trs.map(tr => {
+          const tds = Array.from(tr.querySelectorAll("td,th")).map(td => td.innerText?.trim() || "");
+          if (tds.length >= 4 && tds[1] && !tds[1].toLowerCase().includes("tahap")) return { tahap: tds[1], mulai: tds[2], sampai: tds[3], perubahan: tds[4] || "Tidak Ada" };
+          return null;
+        }).filter(Boolean);
+      });
+      await page.close();
+      if (jadwalRows.length > 0) {
+        await TenderModel.updateOne({ lelangId }, { $set: { jadwal: jadwalRows } });
+        synced++;
       }
-    } else {
-      console.log(`[SUPABASE] Tidak ada data baru untuk diunggah dari ${lpse.nama}.`);
+    } catch (err) {
+      console.error(`[-] Gagal sync jadwal ${tender.lelangId}:`, err.message);
+    }
+    if (synced % 10 === 0) await new Promise(r => setTimeout(r, 500));
+  }
+  await browser.close();
+  console.log(`✅  Jadwal sync: ${synced}/${tenders.length} diperbarui\n`);
+});
+
+agenda.define("cleanup expired tenders", async () => {
+  console.log(`\n🗑️   Cleanup tender kadaluarsa...`);
+  const now = Date.now();
+  const GRACE = 7 * 24 * 60 * 60 * 1000;
+  const mo = {Januari:"01",Februari:"02",Maret:"03",April:"04",Mei:"05",Juni:"06",Juli:"07",Agustus:"08",September:"09",Oktober:"10",November:"11",Desember:"12"};
+  const parseDate = (s) => {
+    const m = s?.trim().match(/^(\d{1,2})\s+(\w+)\s+(\d{4})(?:\s+(\d{2}:\d{2}))?/);
+    if (m) {
+      const d = new Date(`${m[3]}-${mo[m[2]]||"01"}-${m[1].padStart(2,"0")}T${m[4]||"23:59"}:00+07:00`);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const tenders = await TenderModel.find({ "jadwal.0": { $exists: true }, pinned_by_users: { $size: 0 }, status: "aktif" }).lean();
+  let deleted = 0;
+  for (const t of tenders) {
+    let latest = null;
+    for (const step of t.jadwal || []) {
+      const d = parseDate(step.sampai || "");
+      if (d && (!latest || d > latest)) latest = d;
+    }
+    if (latest && (latest.getTime() + GRACE) < now) {
+      await TenderModel.deleteOne({ _id: t._id });
+      deleted++;
     }
   }
+  console.log(`✅  Cleanup: ${deleted} tender dihapus\n`);
+});
+
+agenda.define("deep sync tender details", async () => {
+  console.log(`\n🔍  Deep Sync: Mengambil detail tender perlahan...`);
+  // Cari 10 tender aktif yang belum punya tanggal pembuatan (tender baru)
+  const tenders = await TenderModel.find({
+    status: "aktif",
+    $or: [{ tanggal_pembuatan: null }, { tanggal_pembuatan: { $exists: false } }]
+  }).sort({ createdAt: -1 }).limit(10).lean();
+
+  if (tenders.length === 0) {
+    console.log(`✅  Deep Sync: Tidak ada tender baru yang butuh di-sync saat ini.`);
+    return;
+  }
+
+  console.log(`    Ditemukan ${tenders.length} tender untuk di-sync.`);
+  let successCount = 0;
+
+  for (const tender of tenders) {
+    try {
+      const url = `http://localhost:3000/api/tenders/sync-info/${tender.lelangId}?url_lpse=${encodeURIComponent(tender.url_lpse || "")}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        successCount++;
+        console.log(`    [+] Detail tersinkronisasi: ${tender.lelangId}`);
+      } else {
+        console.log(`    [-] Gagal sinkronisasi: ${tender.lelangId} (HTTP ${res.status})`);
+      }
+    } catch (err) {
+      console.log(`    [-] Error sinkronisasi: ${tender.lelangId} - ${err.message}`);
+    }
+    // Delay 4 detik agar tidak memicu pemblokiran IP (WAF LPSE)
+    await new Promise(r => setTimeout(r, 4000));
+  }
+  
+  console.log(`✅  Deep Sync: Berhasil meng-update ${successCount}/${tenders.length} tender.\n`);
+});
+
+// ════════════════════════════════════════════════════════════════
+// JOB: QUEUE EMAIL NOTIFICATIONS (berjalan setelah setiap scrape)
+// Mencocokkan tender baru dengan profil semua user
+// ════════════════════════════════════════════════════════════════
+agenda.define("queue email notifications", async () => {
+  console.log("📧  [Email] Mengecek tender baru untuk notifikasi email...");
+  try {
+    // Cari tender yang dibuat dalam 35 menit terakhir (sedikit lebih dari interval scrape)
+    const since = new Date(Date.now() - 35 * 60 * 1000);
+    const newTenders = await TenderModel.find(
+      { createdAt: { $gt: since }, status: "aktif" },
+      { nama_paket: 1, instansi: 1, wilayah: 1, kategori: 1, tag: 1, pagu: 1 }
+    ).limit(100).lean();
+
+    if (newTenders.length === 0) {
+      console.log("📧  [Email] Tidak ada tender baru. Dilewati.");
+      return;
+    }
+
+    const allUsers = await UserModel.find({}, { email: 1, nama_lengkap: 1, perusahaan: 1, provinsi: 1, bidang_minat: 1, search_history: 1 }).lean();
+    let queued = 0;
+
+    for (const user of allUsers) {
+      if (!user.email) continue;
+
+      for (const tender of newTenders) {
+        // Hitung skor relevansi sederhana
+        let score = 0;
+        const namaPaket = (tender.nama_paket || "").toLowerCase();
+        const tenderStr = ((tender.wilayah || "") + " " + (tender.instansi || "")).toLowerCase();
+        const prov = (user.provinsi || "").toLowerCase();
+
+        if (prov && tenderStr.includes(prov)) score += 35;
+        if ((user.bidang_minat || []).some(b =>
+          (tender.kategori || "").toLowerCase().includes(b.toLowerCase()) ||
+          namaPaket.includes(b.toLowerCase())
+        )) score += 30;
+        if ((user.search_history || []).some(kw => kw.length > 2 && namaPaket.includes(kw.toLowerCase()))) score += 25;
+
+        if (score < 50) continue; // Hanya yang relevan
+
+        // Cek apakah sudah ada di queue (hindari duplikat)
+        const exists = await PendingEmailModel.exists({ userId: String(user._id), tenderId: String(tender._id) });
+        if (exists) continue;
+
+        await PendingEmailModel.create({
+          userId: String(user._id),
+          userEmail: user.email,
+          userName: user.nama_lengkap || user.perusahaan || "",
+          tenderId: String(tender._id),
+          tenderName: tender.nama_paket,
+          instansi: tender.instansi,
+          wilayah: tender.wilayah,
+          pagu: tender.pagu,
+          score,
+        });
+        queued++;
+      }
+    }
+    console.log(`📧  [Email] ${queued} notifikasi baru dimasukkan ke antrian digest.`);
+  } catch (err) {
+    console.error("📧  [Email] Gagal queue notifikasi:", err.message);
+  }
+});
+
+// ════════════════════════════════════════════════════════════════
+// JOB: SEND DAILY DIGEST — Setiap hari jam 07:00 WIB
+// Mengirim 1 email rekap per user dari antrian
+// ════════════════════════════════════════════════════════════════
+agenda.define("send daily digest", async () => {
+  console.log("📨  [Daily Digest] Memulai pengiriman email rekap harian...");
+  try {
+    const pending = await PendingEmailModel.find({}).lean();
+    if (pending.length === 0) {
+      console.log("📨  [Daily Digest] Tidak ada email dalam antrian.");
+      return;
+    }
+
+    // Kelompokkan per user
+    const byUser = {};
+    for (const p of pending) {
+      if (!byUser[p.userId]) {
+        byUser[p.userId] = { email: p.userEmail, name: p.userName, tenders: [] };
+      }
+      byUser[p.userId].tenders.push(p);
+    }
+
+    let sentCount = 0;
+    const today = new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+
+    for (const [userId, data] of Object.entries(byUser)) {
+      try {
+        const html = buildDailyDigestHtml(
+          { nama_lengkap: data.name },
+          data.tenders
+        );
+
+        const transporter = nodemailer.createTransport({
+          service: "gmail",
+          auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+          },
+        });
+
+        const mailOptions = {
+          from: `"Seleno Platform" <${process.env.EMAIL_USER}>`,
+          to: data.email,
+          subject: `[Daily Digest] ${data.tenders.length} Tender Baru untuk Anda (${today})`,
+          html: html,
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+        
+        sentCount++;
+        console.log(`📨  [Digest] ✅ Terkirim ke ${data.email} (${data.tenders.length} tender) ID: ${info.messageId}`);
+        // Hapus dari queue setelah berhasil
+        await PendingEmailModel.deleteMany({ userId });
+
+      } catch (err) {
+        console.error(`📨  [Digest] Error kirim ke ${data.email}:`, err.message);
+      }
+    }
+
+    console.log(`📨  [Daily Digest] Selesai. ${sentCount}/${Object.keys(byUser).length} email terkirim.\n`);
+  } catch (err) {
+    console.error("📨  [Daily Digest] Gagal:", err.message);
+  }
+});
+
+// ════════════════════════════════════════════════════════════════
+// MAIN
+// ════════════════════════════════════════════════════════════════
+async function main() {
+  console.log("━".repeat(65));
+  console.log("🚀  LPSE SCRAPER — MULTI DAERAH INDONESIA v4 (DOM Scraping)");
+  console.log(`    Daftar: ${LPSE_LIST.length} LPSE | Browsers: ${BROWSER_CONCURRENCY}`);
+  console.log(`    Target: ${BASE_DOMAIN}/{slug}/lelang (Next.js SSR)`);
+  console.log("━".repeat(65));
+
+  await mongoose.connect(MONGO_URI);
+  console.log(`✅  MongoDB: ${MONGO_URI}`);
+
+  // Hapus semua job yang tersangkut dari sesi sebelumnya agar RAM tidak jebol
+  await mongoose.connection.collection("agendaJobs").deleteMany({});
+  console.log("🗑️   Antrean job lama berhasil dibersihkan");
+
+  await agenda.start();
+  console.log("✅  Agenda queue aktif\n");
+
+  await agenda.every("30 minutes", "scrape all lpse");
+  await agenda.every("15 minutes", "sync jadwal aktif");
+  await agenda.every("5 minutes",  "deep sync tender details");
+  await agenda.every("3 hours",    "cleanup expired tenders");
+  await agenda.every("30 minutes", "queue email notifications");  // Jalankan setelah setiap scrape
+  await agenda.schedule("0 0 * * *", "send daily digest");        // Setiap hari jam 07:00 WIB (00:00 UTC)
+
+  console.log("📅  Jadwal scraper:");
+  console.log("    ├─ Scrape semua LPSE  : tiap 30 menit");
+  console.log("    ├─ Sync jadwal aktif  : tiap 15 menit");
+  console.log("    ├─ Deep sync detail   : tiap 5 menit");
+  console.log("    ├─ Cleanup expired    : tiap 3 jam");
+  console.log("    ├─ Queue email notif  : tiap 30 menit");
+  console.log("    └─ Daily Digest email : setiap hari 07:00 WIB\n");
+
+  await agenda.now("scrape all lpse");
+  console.log("⚡  Scraping perdana dimulai...");
+  console.log("⏳  Tekan Ctrl+C untuk berhenti.\n");
 }
 
-// Eksekusi Skrip Utamnya
-run();
+main().catch(err => {
+  console.error("❌ Fatal:", err);
+  process.exit(1);
+});

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+// supabase import removed
 import { Trash2, Mail, Building2, Shield, Search, MoreVertical } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -15,12 +15,16 @@ export default function UserManagement() {
 
   async function fetchUsers() {
     setLoading(true);
-    const { data } = await supabase
-      .from("users")
-      .select("*")
-      .order("created_at", { ascending: false });
-    setUsers(data || []);
-    setLoading(false);
+    try {
+      const res = await fetch("/api/admin/users");
+      const { users, error } = await res.json();
+      if (!res.ok) throw new Error(error);
+      setUsers(users || []);
+    } catch (err: any) {
+      alert("Gagal memuat pengguna: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function deleteUser(id: string, email: string) {
@@ -31,11 +35,13 @@ export default function UserManagement() {
 
     if (!confirm(`Hapus user ${email}? Tindakan ini tidak bisa dibatalkan.`)) return;
 
-    const { error } = await supabase.from("users").delete().eq("id", id);
-    if (error) {
-      alert("Gagal menghapus: " + error.message);
-    } else {
+    try {
+      const res = await fetch(`/api/admin/users?id=${id}`, { method: "DELETE" });
+      const { error } = await res.json();
+      if (!res.ok) throw new Error(error);
       setUsers(users.filter((u) => u.id !== id));
+    } catch (err: any) {
+      alert("Gagal menghapus: " + err.message);
     }
   }
 

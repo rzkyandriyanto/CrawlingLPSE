@@ -9,6 +9,7 @@ export type StoredUser = {
   provinsi?: string;
   website?: string;
   foto_url?: string;
+  search_history?: string[];
 };
 
 export type SearchResultItem = {
@@ -35,4 +36,30 @@ export type SearchResultItem = {
   telepon?: string;
   whatsapp?: string;
   email?: string;
+  url_lpse?: string;
+  lelangId?: string;
+  url_produk?: string;
+  jadwal?: any[];
+  created_at?: string;
+  // Status lifecycle tender
+  status?: "aktif" | "gagal" | "selesai" | "menang";
+  archived_at?: string | null;
+  archived_by?: string | null;
+  // Field dari halaman /pengumumanlelang
+  kode_rup?: string;
+  sumber_dana?: string;
+  url_dok_uraian?: string;
+  tanggal_pembuatan?: string;
+  tahap_saat_ini?: string;
+  satuan_kerja?: string;
+  jenis_pengadaan?: string;
+  tahun_anggaran?: string;
+  jenis_kontrak?: string;
+  lokasi_pekerjaan?: string;
+  kualifikasi_usaha?: string;
+  syarat_kualifikasi?: string;
+  jumlah_peserta?: number;
+  info_synced_at?: string;
+  ai_summary?: any;
+  relevance_score?: number; // 0-100, digunakan untuk personalisasi urutan tampil
 };

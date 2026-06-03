@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowUp, Pin, X, Filter, ShoppingBag, Briefcase, User } from "lucide-react";
+import { ArrowUp, Pin, X, Filter, ShoppingBag, Briefcase, User, Bell, Sparkles, CalendarClock } from "lucide-react";
 import { SearchResultItem } from "@/types";
 import { useDashboard } from "./DashboardContext";
 import ProductCard from "@/components/common/ProductCard";
@@ -23,7 +23,7 @@ export default function DashboardSearchPage() {
 }
 
 function DashboardContent() {
-  const { user, language, pinnedItems, togglePin, removePin, isItemPinned, filterTipe, setFilterTipe } = useDashboard();
+  const { user, language, pinnedItems, togglePin, removePin, isItemPinned, filterTipe, setFilterTipe, unreadNotifCount, notificationsHistory, markNotifAsRead } = useDashboard();
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryKeyword = searchParams.get("keyword");
@@ -121,7 +121,8 @@ function DashboardContent() {
             language,
             filterWilayah,
             filterTipe,
-            filterTanggal: [filterDate, filterMonth, filterYear].filter(Boolean).join(" ") || undefined
+            filterTanggal: [filterDate, filterMonth, filterYear].filter(Boolean).join(" ") || undefined,
+            userId: user?.id || undefined,
           }),
           signal: controller.signal
         });
@@ -185,6 +186,21 @@ function DashboardContent() {
     }
   }, [user, selectedBidang, runSearch, queryKeyword, filterTipe]);
 
+  // Trigger welcome email on first dashboard visit
+  useEffect(() => {
+    if (!user || !user.id) return;
+    
+    const welcomeSentKey = `welcomeEmailSent_${user.id}`;
+    if (!localStorage.getItem(welcomeSentKey)) {
+      localStorage.setItem(welcomeSentKey, "true");
+      fetch("/api/auth/welcome-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id })
+      }).catch(err => console.error("Failed to trigger welcome email:", err));
+    }
+  }, [user]);
+
   const handleKeywordSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     await runSearch(keyword, false);
@@ -199,23 +215,34 @@ function DashboardContent() {
     <main
       ref={mainRef}
       className="p-4 sm:p-8 md:p-10 lg:p-12 pb-24 h-full flex-1 overflow-y-auto"
+      style={{ backgroundColor: "var(--bg-primary)", color: "var(--text-primary)" }}
     >
-      <div className="bg-white -mt-4 sm:-mt-8 md:-mt-10 lg:-mt-12 -mx-4 sm:-mx-8 md:-mx-10 lg:-mx-12 px-4 sm:px-8 md:px-10 lg:px-12 pt-16 sm:pt-10 md:pt-12 lg:pt-14 pb-5 sm:pb-6 border-b border-slate-100 shadow-sm relative z-30 mb-6 sm:mb-8">
+      <div
+        className="-mt-4 sm:-mt-8 md:-mt-10 lg:-mt-12 -mx-4 sm:-mx-8 md:-mx-10 lg:-mx-12 px-4 sm:px-8 md:px-10 lg:px-12 pt-16 sm:pt-10 md:pt-12 lg:pt-14 pb-5 sm:pb-6 relative z-30 mb-6 sm:mb-8"
+        style={{ backgroundColor: "var(--bg-primary)", borderBottom: "1px solid var(--border-primary)" }}
+      >
         <header className="mb-6 sm:mb-8 flex flex-col">
           {/* Top Row Desktop: Label (Left) and Avatar (Right) */}
           <div className="hidden sm:flex items-start justify-between w-full mb-3">
-            <span className="text-xs font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full inline-block mt-2">
+            <span
+              className="text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full inline-block mt-2"
+              style={{ color: "var(--accent)", backgroundColor: "var(--accent-subtle)" }}
+            >
               {language === 'EN' ? 'Dashboard' : 'Beranda'}
             </span>
             <button
               onClick={() => router.push("/dashboard/profil")}
-              className="flex items-center gap-3 pr-1.5 pl-4 py-1.5 bg-white border-2 border-slate-100 rounded-full hover:border-black shadow-sm hover:shadow-md transition-all duration-300 group -mt-1"
+              className="flex items-center gap-3 pr-1.5 pl-4 py-1.5 rounded-full hover:shadow-md transition-all duration-200 group -mt-1 border"
+              style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)" }}
               title="Ke Profil Anda"
             >
-              <span className="text-sm font-bold text-slate-700 group-hover:text-black max-w-[120px] truncate">
+              <span className="text-sm font-semibold truncate max-w-[120px]" style={{ color: "var(--text-secondary)" }}>
                 {user?.nama || user?.perusahaan || "Pengguna"}
               </span>
-              <div className="w-9 h-9 bg-slate-50 rounded-full overflow-hidden ring-2 ring-slate-100 group-hover:ring-black transition-all flex items-center justify-center text-slate-800 shrink-0">
+              <div
+                className="w-9 h-9 rounded-full overflow-hidden ring-2 shrink-0 flex items-center justify-center transition-all"
+                style={{ backgroundColor: "var(--bg-tertiary)", color: "var(--text-primary)" }}
+              >
                 {user?.foto_url ? (
                   <img src={user.foto_url} alt="Avatar" className="w-full h-full object-cover" />
                 ) : (
@@ -227,17 +254,20 @@ function DashboardContent() {
 
           {/* Top Row Mobile: Label only */}
           <div className="flex sm:hidden mb-3">
-            <span className="text-xs font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full inline-block">
+            <span
+              className="text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full inline-block"
+              style={{ color: "var(--accent)", backgroundColor: "var(--accent-subtle)" }}
+            >
               {language === 'EN' ? 'Dashboard' : 'Beranda'}
             </span>
           </div>
 
           <div className="flex-1 flex flex-col sm:flex-row sm:items-start justify-between gap-6">
             <div className="flex-1">
-              <h1 className="text-2xl sm:text-3xl font-black mb-2 text-black flex items-center gap-2">
+              <h1 className="text-2xl sm:text-3xl font-black mb-2 flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
                 Selamat datang kembali, {user?.nama || user?.perusahaan || "Pengguna"}! 👋
               </h1>
-              <p className="text-sm sm:text-base text-slate-500 font-medium">
+              <p className="text-sm sm:text-base font-medium" style={{ color: "var(--text-muted)" }}>
                 Berikut adalah Produk dan Jasa properti yang telah disesuaikan.
               </p>
             </div>
@@ -246,13 +276,17 @@ function DashboardContent() {
             <div className="flex sm:hidden items-center">
               <button
                 onClick={() => router.push("/dashboard/profil")}
-                className="flex items-center gap-3 pr-1.5 pl-4 py-1.5 bg-white border-2 border-slate-100 rounded-full hover:border-black shadow-sm hover:shadow-md transition-all duration-300 group"
+                className="flex items-center gap-3 pr-1.5 pl-4 py-1.5 rounded-full hover:shadow-md transition-all duration-200 group border"
+                style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)" }}
                 title="Ke Profil Anda"
               >
-                <span className="text-sm font-bold text-slate-700 group-hover:text-black max-w-[120px] truncate">
+                <span className="text-sm font-semibold truncate max-w-[120px]" style={{ color: "var(--text-secondary)" }}>
                   {user?.nama || user?.perusahaan || "Pengguna"}
                 </span>
-                <div className="w-10 h-10 bg-slate-50 rounded-full overflow-hidden ring-2 ring-slate-100 group-hover:ring-black transition-all flex items-center justify-center text-slate-800 shrink-0">
+                <div
+                  className="w-10 h-10 rounded-full overflow-hidden ring-2 transition-all flex items-center justify-center shrink-0"
+                  style={{ backgroundColor: "var(--bg-tertiary)", color: "var(--text-primary)" }}
+                >
                   {user?.foto_url ? (
                     <img src={user.foto_url} alt="Avatar" className="w-full h-full object-cover" />
                   ) : (
@@ -268,16 +302,26 @@ function DashboardContent() {
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
             <form onSubmit={handleKeywordSearch} className="mb-3 sm:mb-4 flex flex-col sm:flex-row gap-3">
               <div className="flex-1 flex gap-2 relative">
-                <input
+              <input
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}
                   placeholder={language === 'EN' ? "e.g. laptop procurement, road construction, planning services" : "Contoh: pengadaan laptop, konstruksi jalan, jasa konsultan tata ruang"}
-                  className="flex-1 rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-sm outline-none transition-all placeholder:text-slate-400 focus:border-black text-sm sm:text-base w-full min-w-0"
+                  className="flex-1 rounded-xl border px-4 py-3 text-sm w-full min-w-0 outline-none transition-all duration-200"
+                  style={{
+                    backgroundColor: "var(--bg-input)",
+                    borderColor: "var(--border-primary)",
+                    color: "var(--text-primary)",
+                  }}
                 />
                 <button
                   type="button"
                   onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                  className={`flex-shrink-0 px-4 rounded-2xl border-2 transition-all flex items-center justify-center ${showFilterDropdown || filterWilayah || filterDate ? "bg-black border-black text-white shadow-lg" : "bg-slate-50 border-slate-200 text-slate-500 hover:border-black hover:text-black"}`}
+                  className="flex-shrink-0 px-4 rounded-xl border transition-all flex items-center justify-center"
+                  style={{
+                    backgroundColor: showFilterDropdown || filterWilayah || filterDate ? "var(--accent)" : "var(--bg-input)",
+                    borderColor: showFilterDropdown || filterWilayah || filterDate ? "var(--accent)" : "var(--border-primary)",
+                    color: showFilterDropdown || filterWilayah || filterDate ? "#fff" : "var(--text-secondary)",
+                  }}
                   title={language === 'EN' ? "LPSE Source & Filters" : "Sumber LPSE & Filter"}
                 >
                   <Filter size={20} />
@@ -289,26 +333,29 @@ function DashboardContent() {
                       initial={{ opacity: 0, y: 10, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                      className="absolute top-14 left-0 sm:left-auto sm:right-0 mt-3 bg-white border border-slate-200 shadow-2xl rounded-2xl p-4 w-[280px] sm:w-[320px] z-50 pointer-events-auto"
+                      className="absolute top-14 left-0 sm:left-auto sm:right-0 mt-3 border shadow-2xl rounded-2xl p-4 w-[280px] sm:w-[320px] z-50 pointer-events-auto"
+                      style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)" }}
                     >
                       <div className="mb-4">
-                        <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{language === "EN" ? "LPSE Source Target" : "Target Sumber LPSE"}</label>
+                        <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>{language === "EN" ? "LPSE Source Target" : "Target Sumber LPSE"}</label>
                         <select
-                          value={filterWilayah} // Reusing filterWilayah state to pass as the source
+                          value={filterWilayah}
                           onChange={(e) => setFilterWilayah(e.target.value)}
-                          className="w-full rounded-xl border-2 border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-black appearance-none cursor-pointer"
+                          className="w-full rounded-xl border px-3 py-2 text-sm outline-none appearance-none cursor-pointer"
+                          style={{ backgroundColor: "var(--bg-input)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }}
                         >
                           <option value="">{language === "EN" ? "All (Auto Detect)" : "Semua Instansi (Otomatis)"}</option>
                           {LPSE_SOURCES.map(p => <option key={p} value={p}>{p}</option>)}
                         </select>
                       </div>
                       <div className="mb-4">
-                        <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{language === "EN" ? "Deadline Filter" : "Filter Batas Pendaftaran"}</label>
+                        <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>{language === "EN" ? "Deadline Filter" : "Filter Batas Pendaftaran"}</label>
                         <div className="flex gap-2">
                           <select
                             value={filterDate}
                             onChange={(e) => setFilterDate(e.target.value)}
-                            className="flex-shrink-0 w-16 rounded-xl border-2 border-slate-200 bg-slate-50 px-2 py-2 text-xs sm:text-sm text-slate-800 outline-none focus:border-black appearance-none cursor-pointer text-center"
+                            className="flex-shrink-0 w-16 rounded-xl border px-2 py-2 text-xs sm:text-sm outline-none appearance-none cursor-pointer text-center"
+                            style={{ backgroundColor: "var(--bg-input)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }}
                           >
                             <option value="">DD</option>
                             {Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={String(d).padStart(2, '0')}>{d}</option>)}
@@ -316,7 +363,8 @@ function DashboardContent() {
                           <select
                             value={filterMonth}
                             onChange={(e) => setFilterMonth(e.target.value)}
-                            className="flex-1 rounded-xl border-2 border-slate-200 bg-slate-50 px-2 py-2 text-xs sm:text-sm text-slate-800 outline-none focus:border-black appearance-none cursor-pointer"
+                            className="flex-1 rounded-xl border px-2 py-2 text-xs sm:text-sm outline-none appearance-none cursor-pointer"
+                            style={{ backgroundColor: "var(--bg-input)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }}
                           >
                             <option value="">{language === "EN" ? "Month" : "Bulan"}</option>
                             {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
@@ -324,7 +372,8 @@ function DashboardContent() {
                           <select
                             value={filterYear}
                             onChange={(e) => setFilterYear(e.target.value)}
-                            className="flex-shrink-0 w-20 rounded-xl border-2 border-slate-200 bg-slate-50 px-2 py-2 text-xs sm:text-sm text-slate-800 outline-none focus:border-black appearance-none cursor-pointer text-center"
+                            className="flex-shrink-0 w-20 rounded-xl border px-2 py-2 text-xs sm:text-sm outline-none appearance-none cursor-pointer text-center"
+                            style={{ backgroundColor: "var(--bg-input)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }}
                           >
                             <option value="">YYYY</option>
                             {[...Array(10)].map((_, i) => {
@@ -335,8 +384,8 @@ function DashboardContent() {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <button type="button" onClick={() => { setFilterWilayah(""); setFilterDate(""); setFilterMonth(""); setFilterYear(""); }} className="flex-1 py-2 text-xs font-bold text-slate-400 hover:text-black transition-colors">{language === "EN" ? "Reset" : "Hapus"}</button>
-                        <button type="button" onClick={() => { setShowFilterDropdown(false); void runSearch(keyword, false); }} className="flex-1 py-2 bg-black text-white text-xs font-bold rounded-xl hover:bg-slate-800 shadow-md">{language === "EN" ? "Apply" : "Terapkan"}</button>
+                        <button type="button" onClick={() => { setFilterWilayah(""); setFilterDate(""); setFilterMonth(""); setFilterYear(""); }} className="flex-1 py-2 text-xs font-semibold transition-colors" style={{ color: "var(--text-muted)" }}>{language === "EN" ? "Reset" : "Hapus"}</button>
+                        <button type="button" onClick={() => { setShowFilterDropdown(false); void runSearch(keyword, false); }} className="flex-1 py-2 text-white text-xs font-bold rounded-xl" style={{ backgroundColor: "var(--accent)" }}>{language === "EN" ? "Apply" : "Terapkan"}</button>
                       </div>
                     </motion.div>
                   )}
@@ -345,7 +394,8 @@ function DashboardContent() {
               <button
                 type="submit"
                 disabled={isSearching}
-                className="px-6 py-3 bg-black text-white rounded-2xl font-bold disabled:opacity-60 w-full sm:w-auto overflow-hidden text-ellipsis whitespace-nowrap flex-shrink-0"
+                className="px-6 py-3 text-white rounded-xl font-semibold disabled:opacity-60 w-full sm:w-auto flex-shrink-0 transition-all duration-200"
+                style={{ backgroundColor: "var(--accent)" }}
               >
                 {isSearching ? (language === 'EN' ? "Searching..." : "Mencari...") : (language === 'EN' ? "Search" : "Cari")}
               </button>
@@ -357,8 +407,11 @@ function DashboardContent() {
               </div>
             ) : null}
 
-            {/* Toggle Produk / Jasa - di dalam header */}
-            <div className="bg-slate-100 p-1 rounded-2xl flex gap-1.5">
+            {/* Toggle Produk / Jasa */}
+            <div
+              className="p-1 rounded-xl flex gap-1"
+              style={{ backgroundColor: "var(--bg-tertiary)" }}
+            >
               {(["Produk", "Jasa"] as const).map((tipe) => {
                 const isActive = activeFilter === tipe;
                 return (
@@ -369,10 +422,15 @@ function DashboardContent() {
                       setActiveFilter(tipe);
                       setFilterTipe(tipe);
                     }}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-black text-sm tracking-wide uppercase transition-all duration-200 ${isActive
-                      ? "bg-white text-black shadow-md"
-                      : "text-slate-400 hover:text-slate-600"
-                      }`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-semibold text-sm tracking-wide uppercase transition-all duration-200 ${
+                      isActive
+                        ? "shadow-sm"
+                        : ""
+                    }`}
+                    style={{
+                      backgroundColor: isActive ? "var(--bg-card)" : "transparent",
+                      color: isActive ? "var(--text-primary)" : "var(--text-muted)",
+                    }}
                   >
                     {tipe === "Produk"
                       ? <ShoppingBag size={16} strokeWidth={2.5} />
@@ -383,6 +441,25 @@ function DashboardContent() {
                 );
               })}
             </div>
+
+            {/* Tombol Daftar Klasifikasi Tender Selesai (Hanya muncul jika tab Jasa aktif) */}
+            {activeFilter === "Jasa" && (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => router.push("/dashboard/selesai")}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-semibold text-xs sm:text-sm transition-all duration-200 border"
+                  style={{
+                    backgroundColor: "rgba(99, 102, 241, 0.05)",
+                    borderColor: "rgba(99, 102, 241, 0.2)",
+                    color: "rgb(99, 102, 241)",
+                  }}
+                >
+                  <Briefcase size={16} />
+                  {language === "EN" ? "List of Classified Finished Tenders" : "Daftar Klasifikasi Tender Selesai"}
+                </button>
+              </div>
+            )}
           </motion.div>
         )}
       </div>
@@ -392,12 +469,14 @@ function DashboardContent() {
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          className="max-w-2xl mx-auto mt-4 sm:mt-10 rounded-[1.5rem] sm:rounded-[2.2rem] border border-slate-200 bg-white p-6 sm:p-10 text-center shadow-xl"
+          className="max-w-2xl mx-auto mt-4 sm:mt-10 rounded-2xl border p-6 sm:p-10 text-center"
+          style={{ borderColor: "var(--border-primary)", backgroundColor: "var(--bg-card)" }}
         >
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ repeat: Infinity, duration: 2.4, ease: "linear" }}
-            className="mx-auto mb-4 sm:mb-6 h-10 w-10 sm:h-14 sm:w-14 rounded-full border-4 border-dashed border-black"
+            className="mx-auto mb-4 sm:mb-6 h-10 w-10 sm:h-14 sm:w-14 rounded-full border-4 border-dashed"
+            style={{ borderColor: "var(--accent)" }}
           />
           <h2 className="text-xl sm:text-2xl font-black">{language === 'EN' ? 'Preparing dashboard...' : 'Menyiapkan dashboard...'}</h2>
           <p className="mt-2 sm:mt-3 text-xs sm:text-sm text-slate-500">
@@ -412,10 +491,13 @@ function DashboardContent() {
             <div className="mt-6 sm:mt-8 mb-8 sm:mb-10">
               <div className="flex items-center justify-between mb-4 sm:mb-5">
                 <div className="flex items-center gap-2.5">
-                  <div className="p-2 bg-amber-50 rounded-lg border border-amber-100">
-                    <Pin size={16} className="text-amber-500" />
+                  <div
+                    className="p-2 rounded-lg border"
+                    style={{ backgroundColor: "var(--amber-subtle)", borderColor: "var(--amber-border)" }}
+                  >
+                    <Pin size={16} style={{ color: "var(--amber-text)" }} />
                   </div>
-                  <h2 className="text-base sm:text-lg font-black text-slate-800">
+                  <h2 className="text-base sm:text-lg font-bold" style={{ color: "var(--text-primary)" }}>
                     {language === 'EN' ? 'Saved' : 'Tersimpan'} ({pinnedItems.length})
                   </h2>
                 </div>
@@ -431,7 +513,8 @@ function DashboardContent() {
                   <motion.div
                     key={`pinned-preview-${p.id}`}
                     layout
-                    className="flex-shrink-0 w-[220px] sm:w-[260px] bg-white p-4 rounded-2xl border-2 border-amber-100 shadow-sm hover:shadow-lg transition-all group snap-start"
+                    className="flex-shrink-0 w-[220px] sm:w-[260px] p-4 rounded-xl border-2 shadow-sm hover:shadow-md transition-all group snap-start"
+                    style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--amber-border)" }}
                   >
                     <div className="flex items-start justify-between gap-2 mb-1">
                       <h4 className="text-sm font-black leading-tight line-clamp-2 flex-1">
@@ -454,6 +537,91 @@ function DashboardContent() {
             </div>
           )}
 
+          {/* ── Notification Preview Section ── */}
+          {notificationsHistory.length > 0 && (
+            <div className="mt-6 sm:mt-8 mb-8 sm:mb-10">
+              <div className="flex items-center justify-between mb-4 sm:mb-5">
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className="p-2 rounded-lg border relative"
+                    style={{ backgroundColor: "rgba(99,102,241,0.08)", borderColor: "rgba(99,102,241,0.2)" }}
+                  >
+                    <Bell size={16} style={{ color: "#6366f1" }} />
+                    {unreadNotifCount > 0 && (
+                      <span
+                        className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-0.5 rounded-full flex items-center justify-center text-[9px] font-black text-white"
+                        style={{ background: "#ef4444" }}
+                      >
+                        {unreadNotifCount > 9 ? "9+" : unreadNotifCount}
+                      </span>
+                    )}
+                  </div>
+                  <h2 className="text-base sm:text-lg font-bold" style={{ color: "var(--text-primary)" }}>
+                    {language === 'EN' ? 'Notifications' : 'Notifikasi'}
+                    {unreadNotifCount > 0 && (
+                      <span className="ml-2 text-xs font-black text-white px-2 py-0.5 rounded-full" style={{ background: "#ef4444" }}>
+                        {unreadNotifCount} baru
+                      </span>
+                    )}
+                  </h2>
+                </div>
+                <button
+                  onClick={() => { markNotifAsRead(); router.push("/dashboard/notifikasi"); }}
+                  className="text-xs sm:text-sm font-bold text-slate-400 hover:text-black transition-colors"
+                >
+                  {language === 'EN' ? 'See All →' : 'Lihat Semua →'}
+                </button>
+              </div>
+              <div className="flex flex-col gap-2.5">
+                {notificationsHistory.slice(0, 3).map((notif, i) => (
+                  <motion.div
+                    key={notif.id + notif.type + i}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    className="flex items-start gap-3 p-3.5 rounded-xl border"
+                    style={{
+                      backgroundColor: "var(--bg-card)",
+                      borderColor: notif.type === "new_tender" ? "rgba(34,197,94,0.2)" : "rgba(99,102,241,0.2)",
+                    }}
+                  >
+                    {/* Icon */}
+                    <div
+                      className="w-8 h-8 flex-shrink-0 rounded-lg flex items-center justify-center"
+                      style={{
+                        background: notif.type === "new_tender"
+                          ? "linear-gradient(135deg, #22c55e, #16a34a)"
+                          : "linear-gradient(135deg, #6366f1, #3b82f6)",
+                      }}
+                    >
+                      {notif.type === "new_tender"
+                        ? <Sparkles size={14} className="text-white" strokeWidth={2.5} />
+                        : <CalendarClock size={14} className="text-white" strokeWidth={2.5} />}
+                    </div>
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <span
+                        className="text-[9px] font-extrabold uppercase tracking-widest"
+                        style={{ color: notif.type === "new_tender" ? "#16a34a" : "#6366f1" }}
+                      >
+                        {notif.type === "new_tender" ? "✦ Tender Relevan Baru" : "⟳ Update Jadwal"}
+                      </span>
+                      <p className="text-sm font-bold line-clamp-1 mt-0.5" style={{ color: "var(--text-primary)" }}>
+                        {notif.title}
+                      </p>
+                      <div className="flex gap-3 mt-0.5 flex-wrap">
+                        {notif.instansi && <span className="text-xs" style={{ color: "var(--text-muted)" }}>🏛 {notif.instansi}</span>}
+                        {notif.score && <span className="text-xs font-semibold" style={{ color: "#16a34a" }}>Kecocokan {notif.score}%</span>}
+                        {notif.tahap && <span className="text-xs font-semibold" style={{ color: "#6366f1" }}>Tahap: {notif.tahap}</span>}
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Results Grid (Premium Tile/Grid Cards) ── */}
           <div className="mt-6 sm:mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {filteredResults.length > 0 ? (
               filteredResults.map((p) => (
@@ -467,7 +635,7 @@ function DashboardContent() {
                 />
               ))
             ) : (
-              <div className="col-span-full py-12 sm:py-20 text-center font-bold text-slate-300 italic text-sm sm:text-base">
+              <div className="py-12 sm:py-20 text-center font-medium text-sm sm:text-base" style={{ color: "var(--text-muted)" }}>
                 {language === 'EN' ? "Enter a keyword to start searching for LPSE projects and tenders." : "Masukkan keyword untuk mulai mencari paket pengadaan atau lelang LPSE."}
               </div>
             )}
@@ -479,14 +647,18 @@ function DashboardContent() {
                 <button
                   onClick={() => runSearch(keyword, false, true)}
                   disabled={isLoadingMore || isSearching}
-                  className="px-6 sm:px-8 py-3 sm:py-4 bg-white border-2 border-slate-200 text-slate-800 rounded-2xl font-bold hover:border-black transition-all disabled:opacity-60 flex items-center justify-center gap-2 shadow-sm hover:shadow-xl group text-sm sm:text-base w-full sm:w-auto"
+                  className="px-6 sm:px-8 py-3 sm:py-4 rounded-xl font-semibold hover:opacity-80 transition-all disabled:opacity-50 flex items-center justify-center gap-2 text-sm sm:text-base w-full sm:w-auto border"
+                  style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }}
                   type="button"
                 >
                   {isLoadingMore && <div className="h-5 w-5 animate-spin rounded-full border-2 border-dashed border-black" />}
                   {isLoadingMore ? (language === 'EN' ? "Loading..." : "Sedang Memuat...") : (language === 'EN' ? "Load More" : "Muat Lainnya")}
                 </button>
               ) : (
-                <div className="px-6 py-3 bg-slate-50 border-2 border-slate-100 text-slate-400 rounded-2xl font-bold text-sm sm:text-base">
+                <div
+                  className="px-6 py-3 rounded-xl font-medium text-sm sm:text-base border"
+                  style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border-subtle)", color: "var(--text-muted)" }}
+                >
                   {language === 'EN' ? "All Data Displayed" : "Semua Data Ditampilkan"}
                 </div>
               )}
@@ -504,7 +676,8 @@ function DashboardContent() {
             exit={{ opacity: 0, scale: 0.8, y: 20 }}
             transition={{ duration: 0.2 }}
             onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-            className="fixed bottom-6 right-6 sm:bottom-10 sm:right-10 z-50 p-3 bg-black text-white rounded-full shadow-xl hover:bg-slate-800 transition-all border-2 border-white"
+            className="fixed bottom-24 right-6 sm:bottom-24 sm:right-6 z-50 p-3 rounded-full shadow-xl transition-all border"
+            style={{ backgroundColor: "var(--accent)", color: "#fff", borderColor: "transparent" }}
             title={language === 'EN' ? "Back to Top" : "Kembali ke Atas"}
           >
             <ArrowUp size={24} strokeWidth={2.5} />
