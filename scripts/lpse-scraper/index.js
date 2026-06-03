@@ -601,7 +601,7 @@ async function main() {
   await agenda.every("5 minutes",  "deep sync tender details");
   await agenda.every("3 hours",    "cleanup expired tenders");
   await agenda.every("30 minutes", "queue email notifications");  // Jalankan setelah setiap scrape
-  await agenda.schedule("0 0 * * *", "send daily digest");        // Setiap hari jam 07:00 WIB (00:00 UTC)
+  await agenda.every("0 0 * * *", "send daily digest");        // Setiap hari jam 07:00 WIB (00:00 UTC)
 
   console.log("📅  Jadwal scraper:");
   console.log("    ├─ Scrape semua LPSE  : tiap 30 menit");

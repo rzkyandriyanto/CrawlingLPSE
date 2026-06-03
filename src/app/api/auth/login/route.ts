@@ -27,7 +27,9 @@ export async function POST(req: NextRequest) {
       perusahaan: user.perusahaan,
       tag: user.bidang_minat, // Supabase format compatibility
       role: user.role,
-      avatar_url: user.avatar_url
+      avatar_url: user.avatar_url,
+      kota: user.kota,
+      provinsi: user.provinsi
     };
 
     return NextResponse.json({ user: userToReturn }, { status: 200 });

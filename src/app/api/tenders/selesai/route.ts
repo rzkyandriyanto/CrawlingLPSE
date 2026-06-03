@@ -13,9 +13,11 @@ export async function GET(req: NextRequest) {
     }).sort({ finished_at: -1, updatedAt: -1 });
 
     // Format menyesuaikan kebutuhan UI (SearchResultItem)
-    const mappedTenders = selesaiTenders.map(row => ({
+    const mappedTenders = selesaiTenders.map(row => {
+      const isProdukModal = (row.nama_paket || "").toLowerCase().includes("belanja");
+      return {
       id: row.lelangId,
-      tipe: "Jasa",
+      tipe: isProdukModal ? "Barang" : "Jasa",
       nama_produk: row.nama_paket || "Paket Pengadaan LPSE",
       deskripsi: "Paket pengadaan pemerintah.",
       ringkasan: "Pengadaan tender LPSE",
@@ -37,7 +39,8 @@ export async function GET(req: NextRequest) {
       status: row.status || "selesai",
       archived_at: row.archived_at ? row.archived_at.toISOString() : null,
       archived_by: row.archived_by || null,
-    }));
+      };
+    });
 
     return NextResponse.json({ items: mappedTenders });
   } catch (error: any) {

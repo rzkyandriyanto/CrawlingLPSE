@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Package, Layers, Bookmark, BookmarkCheck, Trash2, MapPin, Calendar, Building2, ArrowRight } from "lucide-react";
+import { Package, Briefcase, Bookmark, BookmarkCheck, Trash2, MapPin, Calendar, Building2, ArrowRight } from "lucide-react";
 import { SearchResultItem } from "@/types";
 
 import { useDashboard } from "@/app/dashboard/DashboardContext";
@@ -11,6 +11,7 @@ type ProductCardProps = {
   onTogglePin: (item: SearchResultItem) => void;
   onRemovePin?: (item: SearchResultItem) => void;
   showRemoveMode?: boolean;
+  customBadge?: React.ReactNode;
 };
 
 const formatDate = (dateString?: string) => {
@@ -38,6 +39,7 @@ export default function ProductCard({
   onTogglePin,
   onRemovePin,
   showRemoveMode = false,
+  customBadge,
 }: ProductCardProps) {
   const { setSelectedItem } = useDashboard();
 
@@ -45,7 +47,7 @@ export default function ProductCard({
     setSelectedItem(item);
   };
 
-  const isJasa = item.kategori === "Jasa" || item.tipe === "Jasa";
+  const isJasa = item.tipe === "Jasa";
 
   return (
     <motion.div
@@ -72,21 +74,30 @@ export default function ProductCard({
       onClick={handleGoToDetail}
     >
       <div className="flex flex-col gap-3">
-        {/* Top Header Row: Icon + Tag Pill + Relevance Badge */}
-        <div className="flex items-center justify-between gap-2">
+        {/* Top Header Row: Icon + Tag Pill + Custom Badge */}
+        <div className="flex items-center gap-2 w-full">
           <div
             className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center"
-            style={{ backgroundColor: isJasa ? "var(--blue-subtle)" : "var(--accent-subtle)" }}
+            style={
+              isJasa
+                ? { backgroundColor: "var(--blue-subtle)" }
+                : { backgroundColor: "#fff7ed" } // orange-50
+            }
           >
             {isJasa ? (
-              <Layers size={16} strokeWidth={2} style={{ color: "var(--blue-text)" }} />
+              <Briefcase size={16} strokeWidth={2} style={{ color: "var(--blue-text)" }} />
             ) : (
-              <Package size={16} strokeWidth={2} style={{ color: "var(--accent)" }} />
+              <Package size={16} strokeWidth={2} style={{ color: "#f97316" }} /> // orange-500
             )}
           </div>
+          
+          <div className="flex-1 flex justify-center items-center overflow-hidden">
+            {customBadge}
+          </div>
+
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <span
-              className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full"
+              className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full whitespace-nowrap"
               style={{ backgroundColor: "var(--bg-badge)", color: "var(--text-muted)" }}
             >
               {item.tag}

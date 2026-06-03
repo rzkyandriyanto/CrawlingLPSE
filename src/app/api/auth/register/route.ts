@@ -44,7 +44,9 @@ export async function POST(req: NextRequest) {
       perusahaan: newUser.perusahaan,
       tag: newUser.bidang_minat,
       role: newUser.role,
-      avatar_url: newUser.avatar_url
+      avatar_url: newUser.avatar_url,
+      kota: newUser.kota,
+      provinsi: newUser.provinsi
     };
 
     return NextResponse.json({ user: userToReturn }, { status: 201 });

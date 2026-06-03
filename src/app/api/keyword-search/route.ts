@@ -98,23 +98,31 @@ export async function POST(req: NextRequest) {
     // ============================================================
     // QUERY TABEL 1: paket_lelang (Jasa - dari LPSE)
     // ============================================================
-    if (tipe === "" || tipe === "Jasa") {
+    if (tipe === "" || tipe === "Jasa" || tipe === "Barang") {
       let query: any = { status: { $nin: ["selesai", "menang"] } };
+      let andConditions: any[] = [];
 
       if (trimmedKeyword) {
-        query.nama_paket = { $regex: trimmedKeyword, $options: "i" };
+        andConditions.push({ nama_paket: { $regex: trimmedKeyword, $options: "i" } });
       }
+      
+      if (tipe === "Jasa") {
+        andConditions.push({ nama_paket: { $not: /belanja/i } });
+      } else if (tipe === "Barang") {
+        andConditions.push({ nama_paket: { $regex: /belanja/i } });
+      }
+
       if (bidang && bidang.length > 0) {
-        // Jika ada bidang, kita harus memadukan query OR dengan filter sebelumnya
         const orConditions = bidang.map((b: string) => ({ nama_paket: { $regex: b, $options: "i" } }));
-        if (query.nama_paket) {
-           query = { $and: [query, { $or: orConditions }] };
-        } else {
-           query.$or = orConditions;
-        }
+        andConditions.push({ $or: orConditions });
       }
+
       if (targetLpse && targetLpse !== "Semua Instansi (Otomatis)") {
         query.instansi = { $regex: targetLpse.replace("LPSE ", ""), $options: "i" };
+      }
+
+      if (andConditions.length > 0) {
+        query.$and = andConditions;
       }
 
       const pipeline: any[] = [
@@ -197,9 +205,11 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const jasaItems = (jasaData || []).map((row: any) => ({
+      const jasaItems = (jasaData || []).map((row: any) => {
+        const isProdukModal = (row.nama_paket || "").toLowerCase().includes("belanja");
+        return {
         id: row._id.toString(),
-        tipe: "Jasa",
+        tipe: isProdukModal ? "Barang" : "Jasa",
         nama_produk: row.nama_paket || "Paket Pengadaan LPSE",
         deskripsi: "Paket pengadaan pemerintah.",
         ringkasan: "Pengadaan tender LPSE",
@@ -221,7 +231,8 @@ export async function POST(req: NextRequest) {
         // Tahap weight sudah dihitung di DB pipeline (untuk sort compound)
         _tahap_weight: row.tahap_weight ?? 99,
         relevance_score: calcRelevanceScore(row, userProfile),
-      }));
+        };
+      });
 
       items = [...items, ...jasaItems];
     }
@@ -229,7 +240,7 @@ export async function POST(req: NextRequest) {
     // ============================================================
     // QUERY TABEL 2: produk (Produk - dari Indonetwork)
     // ============================================================
-    if (tipe === "" || tipe === "Produk" || tipe === "Jasa") {
+    if (tipe === "" || tipe === "Barang" || tipe === "Jasa") {
       let query: any = {};
 
       if (trimmedKeyword) {
@@ -265,12 +276,12 @@ export async function POST(req: NextRequest) {
 
         return {
           id: row._id.toString(),
-          tipe: isActuallyJasa ? "Jasa" : "Produk",
+          tipe: isActuallyJasa ? "Jasa" : "Barang",
           nama_produk: row.nama_produk || "Produk",
           deskripsi: cleanDesc,
           ringkasan: cleanDesc,
           gambar_url: row.gambar_url || "",
-          kategori: isActuallyJasa ? "Layanan & Jasa" : "Produk",
+          kategori: isActuallyJasa ? "Layanan & Jasa" : "Barang",
           tag: row.tag || "Umum",
           wilayah: row.kota || "Indonesia",
           tanggal: row.createdAt || "-",

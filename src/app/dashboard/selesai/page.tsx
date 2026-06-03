@@ -14,6 +14,7 @@ export default function SelesaiPage() {
   const [items, setItems] = useState<SearchResultItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filterHari, setFilterHari] = useState<number | "all">("all");
 
   useEffect(() => {
     async function fetchSelesaiTenders() {
@@ -41,6 +42,13 @@ export default function SelesaiPage() {
     const sisaMs = deleteDate - now;
     return Math.max(0, Math.ceil(sisaMs / (24 * 60 * 60 * 1000)));
   }
+
+  const filteredItems = items.filter((item) => {
+    if (filterHari === "all") return true;
+    const sisa = getSisaHari(item.archived_at);
+    if (sisa === null) return false;
+    return sisa === filterHari;
+  });
 
   return (
     <main
@@ -84,6 +92,31 @@ export default function SelesaiPage() {
       </div>
 
       <div className="max-w-6xl mx-auto w-full">
+        {/* Filter Bar */}
+        <div className="mb-6 flex flex-wrap gap-2 items-center">
+          <span className="text-sm font-semibold text-slate-600 mr-2">
+            {language === "EN" ? "Filter by Remaining Days:" : "Filter Sisa Waktu:"}
+          </span>
+          {[
+            { value: "all", label: language === "EN" ? "All" : "Semua" },
+            { value: 1, label: language === "EN" ? "1 Day" : "1 Hari" },
+            { value: 2, label: language === "EN" ? "2 Days" : "2 Hari" },
+            { value: 3, label: language === "EN" ? "3 Days" : "3 Hari" },
+          ].map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setFilterHari(opt.value as any)}
+              className={`px-3 py-1.5 text-xs font-bold rounded-full transition-all ${
+                filterHari === opt.value
+                  ? "bg-emerald-500 text-white shadow-md"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20">
             <div className="w-8 h-8 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin mb-4" />
@@ -109,16 +142,30 @@ export default function SelesaiPage() {
                 : "Tender yang telah mencapai tahap selesai atau diumumkan pemenangnya akan otomatis muncul di sini."}
             </p>
           </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 px-4 text-center rounded-2xl border border-dashed" style={{ borderColor: "var(--border-primary)", backgroundColor: "var(--bg-secondary)" }}>
+            <div className="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-4">
+              <SearchX size={32} />
+            </div>
+            <h3 className="text-lg font-bold mb-2">
+              {language === "EN" ? "No matches found" : "Tidak ada kecocokan"}
+            </h3>
+            <p className="text-sm max-w-md" style={{ color: "var(--text-muted)" }}>
+              {language === "EN" 
+                ? "No finished tenders match the selected filter." 
+                : "Tidak ada tender selesai yang sesuai dengan filter waktu yang dipilih."}
+            </p>
+          </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:gap-6">
-            {items.map((item) => {
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            {filteredItems.map((item) => {
               const isPinned = false; // Karena ini bukan halaman tersimpan, pin status bisa dihiraukan atau disambungkan ke state global jika mau
               
               // Tambahkan badge countdown
               const sisaHari = getSisaHari(item.archived_at);
               const customBadge = sisaHari !== null ? (
                 <div
-                  className="absolute top-5 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1.5 shadow-sm z-10 backdrop-blur-md"
+                  className="px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1.5 w-fit"
                   style={{
                     backgroundColor: sisaHari <= 1 ? "rgba(239, 68, 68, 0.15)" : "rgba(255, 255, 255, 0.8)",
                     color: sisaHari <= 1 ? "rgb(239, 68, 68)" : "var(--text-secondary)",
@@ -135,12 +182,12 @@ export default function SelesaiPage() {
 
               return (
                 <div key={item.id} className="relative group">
-                  {customBadge}
                   <ProductCard
                     item={item}
                     isPinned={isPinned}
                     onTogglePin={() => togglePin(item)}
                     language={language}
+                    customBadge={customBadge}
                   />
                 </div>
               );

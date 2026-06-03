@@ -38,7 +38,9 @@ export async function PUT(req: NextRequest) {
         perusahaan: updatedUser.perusahaan,
         tag: updatedUser.bidang_minat,
         role: updatedUser.role,
-        avatar_url: updatedUser.avatar_url
+        avatar_url: updatedUser.avatar_url,
+        kota: updatedUser.kota,
+        provinsi: updatedUser.provinsi
       }
     }, { status: 200 });
 

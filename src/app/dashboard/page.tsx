@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowUp, Pin, X, Filter, ShoppingBag, Briefcase, User, Bell, Sparkles, CalendarClock } from "lucide-react";
+import { ArrowUp, Pin, X, Filter, Package, Briefcase, User, Bell, Sparkles, CalendarClock } from "lucide-react";
 import { SearchResultItem } from "@/types";
 import { useDashboard } from "./DashboardContext";
 import ProductCard from "@/components/common/ProductCard";
@@ -44,11 +44,16 @@ function DashboardContent() {
   const [filterMonth, setFilterMonth] = useState("");
   const [filterYear, setFilterYear] = useState("");
 
-  const LPSE_SOURCES = [
-    "LPSE Nasional (INAPROC)", "LPSE Provinsi DKI Jakarta", "LPSE Provinsi Jawa Barat", "LPSE Provinsi Jawa Tengah",
-    "LPSE Provinsi Jawa Timur", "LPSE Kota Bekasi", "LPSE Kota Bandung", "LPSE Kota Bogor", "LPSE Kota Depok",
-    "LPSE Kota Surabaya", "LPSE Kota Semarang", "Kementerian PUPR", "Kementerian Keuangan", "Kementerian Kesehatan"
-  ];
+  const [lpseSources, setLpseSources] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch("/api/lpse-sources")
+      .then(res => res.json())
+      .then(data => {
+        if (data.sources) setLpseSources(data.sources);
+      })
+      .catch(err => console.error("Failed to fetch LPSE sources", err));
+  }, []);
   const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 
   const mainRef = useRef<HTMLElement>(null);
@@ -268,7 +273,7 @@ function DashboardContent() {
                 Selamat datang kembali, {user?.nama || user?.perusahaan || "Pengguna"}! 👋
               </h1>
               <p className="text-sm sm:text-base font-medium" style={{ color: "var(--text-muted)" }}>
-                Berikut adalah Produk dan Jasa properti yang telah disesuaikan.
+                Berikut adalah Barang dan Jasa properti yang telah disesuaikan.
               </p>
             </div>
 
@@ -345,7 +350,7 @@ function DashboardContent() {
                           style={{ backgroundColor: "var(--bg-input)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }}
                         >
                           <option value="">{language === "EN" ? "All (Auto Detect)" : "Semua Instansi (Otomatis)"}</option>
-                          {LPSE_SOURCES.map(p => <option key={p} value={p}>{p}</option>)}
+                          {lpseSources.map(p => <option key={p} value={p}>{p}</option>)}
                         </select>
                       </div>
                       <div className="mb-4">
@@ -407,12 +412,12 @@ function DashboardContent() {
               </div>
             ) : null}
 
-            {/* Toggle Produk / Jasa */}
+            {/* Toggle Barang / Jasa */}
             <div
               className="p-1 rounded-xl flex gap-1"
               style={{ backgroundColor: "var(--bg-tertiary)" }}
             >
-              {(["Produk", "Jasa"] as const).map((tipe) => {
+              {(["Barang", "Jasa"] as const).map((tipe) => {
                 const isActive = activeFilter === tipe;
                 return (
                   <button
@@ -432,11 +437,15 @@ function DashboardContent() {
                       color: isActive ? "var(--text-primary)" : "var(--text-muted)",
                     }}
                   >
-                    {tipe === "Produk"
-                      ? <ShoppingBag size={16} strokeWidth={2.5} />
+                    <span className="font-bold whitespace-nowrap">
+                      {tipe === "Barang"
+                        ? (language === "EN" ? "Goods" : "Barang")
+                        : (language === "EN" ? "Services" : "Jasa")}
+                    </span>
+                    {tipe === "Barang"
+                      ? <Package size={16} strokeWidth={2.5} />
                       : <Briefcase size={16} strokeWidth={2.5} />
                     }
-                    {tipe}
                   </button>
                 );
               })}

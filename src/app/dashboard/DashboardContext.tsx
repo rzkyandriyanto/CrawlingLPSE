@@ -51,7 +51,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [pinnedItems, setPinnedItems] = useState<SearchResultItem[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<SearchResultItem | null>(null);
-  const [filterTipe, setFilterTipe] = useState("Produk");
+  const [filterTipe, setFilterTipe] = useState("Barang");
   const [notification, setNotification] = useState<NotifItem | null>(null);
   const [notifQueue, setNotifQueue] = useState<NotifItem[]>([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
