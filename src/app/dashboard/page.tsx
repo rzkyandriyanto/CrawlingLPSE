@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowUp, Pin, X, Filter, Package, Briefcase, User, Bell, Sparkles, CalendarClock } from "lucide-react";
+import { ArrowUp, Pin, X, Filter, Package, Briefcase, User, Bell, Sparkles, CalendarClock, Trophy, ChevronDown, ChevronUp, TrendingUp, Tag } from "lucide-react";
 import { SearchResultItem } from "@/types";
 import { useDashboard } from "./DashboardContext";
 import ProductCard from "@/components/common/ProductCard";
@@ -22,6 +22,11 @@ export default function DashboardSearchPage() {
   );
 }
 
+// Mock Data untuk Trending Keywords (Saran Pencarian)
+const TRENDING_KEYWORDS = [
+  "Laptop", "Jalan Tol", "Catering", "Gedung", "Seragam", "Kendaraan Dinas", "Obat-obatan", "Komputer", "ATK", "Konstruksi", "Event Organizer"
+];
+
 function DashboardContent() {
   const { user, language, pinnedItems, togglePin, removePin, isItemPinned, filterTipe, setFilterTipe, unreadNotifCount, notificationsHistory, markNotifAsRead } = useDashboard();
   const router = useRouter();
@@ -33,10 +38,16 @@ function DashboardContent() {
   const [isPreparing, setIsPreparing] = useState(true);
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [activeFilter, setActiveFilter] = useState(filterTipe);
+  const [filterStatus, setFilterStatus] = useState("Semua");
   const [errorText, setErrorText] = useState("");
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  const [earlyStageTenders, setEarlyStageTenders] = useState<any[]>([]);
+  const [lpseStats, setLpseStats] = useState<{name: string, count: number}[]>([]);
+  const [expandedLeaderboard, setExpandedLeaderboard] = useState<string | null>(null);
+  const [topKeywords, setTopKeywords] = useState<string[]>(TRENDING_KEYWORDS);
 
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [filterWilayah, setFilterWilayah] = useState("");
@@ -96,10 +107,6 @@ function DashboardContent() {
   const runSearch = useCallback(
     async (searchKeyword: string, isAuto = false, isLoadMore = false) => {
       const trimmedKeyword = searchKeyword.trim();
-      if (!selectedBidang.length) {
-        setErrorText("Bidang user belum dipilih. Silakan update profil/register.");
-        return;
-      }
 
       // Abort previous request
       if (abortControllerRef.current) {
@@ -126,6 +133,7 @@ function DashboardContent() {
             language,
             filterWilayah,
             filterTipe,
+            filterStatus,
             filterTanggal: [filterDate, filterMonth, filterYear].filter(Boolean).join(" ") || undefined,
             userId: user?.id || undefined,
           }),
@@ -133,6 +141,10 @@ function DashboardContent() {
         });
         const payload = (await res.json()) as {
           items?: Array<Omit<SearchResultItem, "id">>;
+          leaderboard?: any[];
+          lpseStats?: {name: string, count: number}[];
+          earlyStageTenders?: any[];
+          topKeywords?: string[];
           error?: string;
         };
         if (!res.ok) {
@@ -151,6 +163,12 @@ function DashboardContent() {
         }
 
         setResults((prev) => (isLoadMore ? [...prev, ...mapped] : mapped));
+        if (!isLoadMore) {
+          if (payload.leaderboard) setLeaderboard(payload.leaderboard);
+          if (payload.lpseStats) setLpseStats(payload.lpseStats);
+          if (payload.earlyStageTenders) setEarlyStageTenders(payload.earlyStageTenders);
+          if (payload.topKeywords && payload.topKeywords.length > 0) setTopKeywords(payload.topKeywords);
+        }
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
           // Ignore abort errors
@@ -169,7 +187,7 @@ function DashboardContent() {
         }
       }
     },
-    [selectedBidang, language, filterWilayah, filterTipe, filterDate, filterMonth, filterYear],
+    [selectedBidang, language, filterWilayah, filterTipe, filterStatus, filterDate, filterMonth, filterYear],
   );
 
   useEffect(() => {
@@ -343,14 +361,51 @@ function DashboardContent() {
                     >
                       <div className="mb-4">
                         <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>{language === "EN" ? "LPSE Source Target" : "Target Sumber LPSE"}</label>
+                        <div className="border rounded-xl overflow-hidden flex flex-col" style={{ borderColor: "var(--border-primary)", backgroundColor: "var(--bg-input)" }}>
+                          <button
+                            type="button"
+                            onClick={() => setFilterWilayah("")}
+                            className={`w-full text-left px-3 py-2 text-sm transition-colors border-b flex justify-between items-center ${!filterWilayah ? 'bg-amber-50/50 font-bold' : 'hover:bg-slate-50'}`}
+                            style={{ borderColor: "var(--border-primary)" }}
+                          >
+                            <span className={!filterWilayah ? 'text-amber-700' : 'text-slate-700'}>
+                              {language === "EN" ? "All (Auto Detect)" : "Semua Instansi (Otomatis)"}
+                            </span>
+                          </button>
+                          <div className="max-h-48 overflow-y-auto custom-scrollbar">
+                            {lpseStats.length > 0 ? (
+                              lpseStats.map(stat => (
+                                <button
+                                  key={stat.name}
+                                  type="button"
+                                  onClick={() => setFilterWilayah(stat.name)}
+                                  className={`w-full text-left px-3 py-2 text-sm transition-colors flex justify-between items-center ${filterWilayah === stat.name ? 'bg-amber-50/50' : 'hover:bg-slate-50'}`}
+                                >
+                                  <span className={`truncate mr-2 ${filterWilayah === stat.name ? 'font-bold text-amber-700' : 'text-slate-700'}`}>{stat.name}</span>
+                                  <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full shrink-0">
+                                    {stat.count.toLocaleString('id-ID')}
+                                  </span>
+                                </button>
+                              ))
+                            ) : (
+                              <div className="px-3 py-2 text-xs text-slate-400 text-center italic">Tidak ada data.</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mb-4">
+                        <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>{language === "EN" ? "Tender Status" : "Status Tender"}</label>
                         <select
-                          value={filterWilayah}
-                          onChange={(e) => setFilterWilayah(e.target.value)}
+                          value={filterStatus}
+                          onChange={(e) => setFilterStatus(e.target.value)}
                           className="w-full rounded-xl border px-3 py-2 text-sm outline-none appearance-none cursor-pointer"
                           style={{ backgroundColor: "var(--bg-input)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }}
                         >
-                          <option value="">{language === "EN" ? "All (Auto Detect)" : "Semua Instansi (Otomatis)"}</option>
-                          {lpseSources.map(p => <option key={p} value={p}>{p}</option>)}
+                          <option value="Aktif">{language === "EN" ? "Active & Recently Finished" : "Aktif & Baru Selesai"}</option>
+                          <option value="Selesai">{language === "EN" ? "Finished" : "Selesai"}</option>
+                          <option value="Gagal">{language === "EN" ? "Failed/Cancelled" : "Gagal/Batal"}</option>
+                          <option value="Diulang">{language === "EN" ? "Retender/Failed (Badge)" : "Tender Ulang / Gagal"}</option>
+                          <option value="Semua">{language === "EN" ? "All Status" : "Semua Status"}</option>
                         </select>
                       </div>
                       <div className="mb-4">
@@ -389,7 +444,7 @@ function DashboardContent() {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <button type="button" onClick={() => { setFilterWilayah(""); setFilterDate(""); setFilterMonth(""); setFilterYear(""); }} className="flex-1 py-2 text-xs font-semibold transition-colors" style={{ color: "var(--text-muted)" }}>{language === "EN" ? "Reset" : "Hapus"}</button>
+                        <button type="button" onClick={() => { setFilterWilayah(""); setFilterStatus("Semua"); setFilterDate(""); setFilterMonth(""); setFilterYear(""); }} className="flex-1 py-2 text-xs font-semibold transition-colors" style={{ color: "var(--text-muted)" }}>{language === "EN" ? "Reset" : "Hapus"}</button>
                         <button type="button" onClick={() => { setShowFilterDropdown(false); void runSearch(keyword, false); }} className="flex-1 py-2 text-white text-xs font-bold rounded-xl" style={{ backgroundColor: "var(--accent)" }}>{language === "EN" ? "Apply" : "Terapkan"}</button>
                       </div>
                     </motion.div>
@@ -405,6 +460,48 @@ function DashboardContent() {
                 {isSearching ? (language === 'EN' ? "Searching..." : "Mencari...") : (language === 'EN' ? "Search" : "Cari")}
               </button>
             </form>
+
+            {/* Popular Search Suggestions */}
+            <div className="mb-4 sm:mb-5">
+              <div className="flex items-center gap-2 mb-2 px-1">
+                <TrendingUp size={14} className="text-blue-500" />
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  {language === 'EN' ? 'Popular Searches' : 'Pencarian Populer'}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {topKeywords.map((kw, idx) => {
+                  const currentKeywords = keyword.split(" ").map(k => k.trim()).filter(Boolean);
+                  const isSelected = currentKeywords.includes(kw);
+
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        let newKeywords;
+                        if (isSelected) {
+                          newKeywords = currentKeywords.filter(k => k !== kw);
+                        } else {
+                          newKeywords = [...currentKeywords, kw];
+                        }
+                        const newKeywordStr = newKeywords.join(" ");
+                        setKeyword(newKeywordStr);
+                        void runSearch(newKeywordStr, false);
+                      }}
+                      className="px-3 py-1.5 rounded-full text-xs font-bold transition-all border group"
+                      style={{ 
+                        backgroundColor: isSelected ? "var(--accent)" : "var(--bg-card)",
+                        borderColor: isSelected ? "var(--accent)" : "var(--border-primary)",
+                        color: isSelected ? "#fff" : "var(--text-secondary)"
+                      }}
+                    >
+                      {kw}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             {errorText ? (
               <div className="mb-3 sm:mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
@@ -450,25 +547,6 @@ function DashboardContent() {
                 );
               })}
             </div>
-
-            {/* Tombol Daftar Klasifikasi Tender Selesai (Hanya muncul jika tab Jasa aktif) */}
-            {activeFilter === "Jasa" && (
-              <div className="mt-3">
-                <button
-                  type="button"
-                  onClick={() => router.push("/dashboard/selesai")}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-semibold text-xs sm:text-sm transition-all duration-200 border"
-                  style={{
-                    backgroundColor: "rgba(99, 102, 241, 0.05)",
-                    borderColor: "rgba(99, 102, 241, 0.2)",
-                    color: "rgb(99, 102, 241)",
-                  }}
-                >
-                  <Briefcase size={16} />
-                  {language === "EN" ? "List of Classified Finished Tenders" : "Daftar Klasifikasi Tender Selesai"}
-                </button>
-              </div>
-            )}
           </motion.div>
         )}
       </div>
@@ -630,25 +708,152 @@ function DashboardContent() {
             </div>
           )}
 
+          {/* ── Leaderboard Pemenang ── */}
+          {leaderboard.length > 0 && !isPreparing && (
+            <div className="mt-6 mb-4 w-full sm:max-w-sm">
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between p-3 bg-slate-50 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 rounded border bg-amber-50 border-amber-200">
+                      <Trophy size={12} className="text-amber-500" />
+                    </div>
+                    <h2 className="text-xs font-black text-slate-800 tracking-tight">
+                      {language === 'EN' ? 'Top Winners' : 'Top Pemenang'} {filterTipe !== 'Semua' && filterTipe !== '' ? filterTipe : ''}
+                    </h2>
+                  </div>
+                </div>
+                <div className="flex flex-col divide-y divide-slate-100 min-h-[100px]">
+                  {leaderboard.map((winner: any, idx: number) => {
+                      const isExpanded = expandedLeaderboard === winner.name;
+                      return (
+                        <div key={idx} className="flex flex-col">
+                          <button 
+                            onClick={() => setExpandedLeaderboard(isExpanded ? null : winner.name)}
+                            className="w-full flex items-center justify-between p-2.5 text-left hover:bg-slate-50 transition-colors"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                              <span className={`text-[10px] font-black w-4 text-center shrink-0 ${idx === 0 ? 'text-amber-500' : idx === 1 ? 'text-slate-500' : idx === 2 ? 'text-orange-400' : 'text-slate-300'}`}>
+                                #{idx + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="font-bold text-slate-700 text-[11px] truncate">{winner.name}</p>
+                                <p className="text-[9px] font-bold text-slate-400 mt-0.5">{winner.count} Menang</p>
+                              </div>
+                            </div>
+                            <div className="shrink-0 text-slate-300">
+                              {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            </div>
+                          </button>
+                          
+                          <AnimatePresence>
+                            {isExpanded && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: "auto", opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                className="overflow-hidden bg-slate-50/50"
+                              >
+                                <div className="px-2.5 pb-2.5 pt-1 flex flex-col gap-1.5 border-t border-slate-100">
+                                  {winner.tenders?.map((t: any, i: number) => (
+                                    <div key={i} className="flex flex-col gap-0.5 p-2 bg-white rounded border border-slate-100 shadow-sm">
+                                      <p className="font-bold text-slate-600 text-[9px] line-clamp-1">{t.nama_paket}</p>
+                                      <div className="flex justify-between items-center mt-0.5">
+                                        <span className="text-[8px] font-bold text-green-600">{t.status || 'Selesai'}</span>
+                                        <span className="text-[9px] font-black text-slate-800">{t.pagu}</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      );
+                    })
+                  }
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Tender Tahap Awal (Highlight Box) ── */}
+          {earlyStageTenders.length > 0 && !isPreparing && (
+            <div className="mt-6 sm:mt-10 mb-8 p-4 sm:p-6 bg-slate-50 border border-blue-100 rounded-2xl relative overflow-hidden shadow-sm">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-blue-400 opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
+              
+              <div className="flex items-center gap-2.5 mb-5 relative z-10">
+                <div className="p-1.5 sm:p-2 rounded-lg border bg-blue-100 border-blue-200">
+                  <Sparkles size={16} className="text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg sm:text-xl font-black text-slate-800 tracking-tight leading-tight">
+                    {language === 'EN' ? 'New/Early Stage Tenders' : 'Tender Tahap Awal'} {filterTipe !== 'Semua' && filterTipe !== '' ? filterTipe : ''}
+                  </h2>
+                  <p className="text-[11px] text-slate-500 font-medium">Peluang terbaru yang sedang dalam masa pendaftaran / pengumuman.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 relative z-10">
+                {earlyStageTenders.map((t: any, idx: number) => (
+                  <ProductCard
+                    key={t.id || idx}
+                    item={t}
+                    language={language}
+                    isPinned={isItemPinned(t)}
+                    onTogglePin={togglePin}
+                    showRemoveMode={false}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* ── Results Grid (Premium Tile/Grid Cards) ── */}
-          <div className="mt-6 sm:mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div className="mt-4">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 px-1">
+              Semua Hasil Pencarian
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {filteredResults.length > 0 ? (
-              filteredResults.map((p) => (
-                <ProductCard
-                  key={p.id}
-                  item={p}
-                  language={language}
-                  isPinned={isItemPinned(p)}
-                  onTogglePin={togglePin}
-                  showRemoveMode={false}
-                />
-              ))
+              filteredResults.map((p) => {
+                const isSelesai = p.status === "selesai" || p.status === "menang" || p.status === "batal" || p.status === "gagal" || (p.tahap_saat_ini && /selesai|batal|gagal|penunjukan|sppbj|penandatanganan|kontrak/i.test(p.tahap_saat_ini));
+                return (
+                  <ProductCard
+                    key={p.id}
+                    item={p}
+                    language={language}
+                    isPinned={isItemPinned(p)}
+                    onTogglePin={togglePin}
+                    showRemoveMode={false}
+                    customBadge={(() => {
+                      const isMenangSelesai = p.status === "selesai" || p.status === "menang" || (p.tahap_saat_ini && /selesai|penunjukan|sppbj|penandatanganan|kontrak/i.test(p.tahap_saat_ini));
+                      if (!isMenangSelesai) return null;
+
+                      return (
+                        <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                          {p.pemenang_nama && (
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-green-600 text-white shadow-sm flex items-center gap-1 max-w-[140px] truncate" title={`Pemenang: ${p.pemenang_nama}`}>
+                              <Trophy className="w-2.5 h-2.5 shrink-0 text-yellow-300" /> <span className="truncate">{p.pemenang_nama}</span>
+                            </span>
+                          )}
+                          {!p.pemenang_nama && isMenangSelesai && (
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-green-100 text-green-700 border border-green-200 shrink-0">
+                              Selesai
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  />
+                );
+              })
             ) : (
               <div className="py-12 sm:py-20 text-center font-medium text-sm sm:text-base" style={{ color: "var(--text-muted)" }}>
                 {language === 'EN' ? "Enter a keyword to start searching for LPSE projects and tenders." : "Masukkan keyword untuk mulai mencari paket pengadaan atau lelang LPSE."}
               </div>
             )}
           </div>
+        </div>
 
           {filteredResults.length > 0 && (
             <div className="mt-8 sm:mt-10 flex justify-center">

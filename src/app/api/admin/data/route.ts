@@ -12,7 +12,8 @@ export async function GET(req: NextRequest) {
 
     let data = [];
     if (table === "paket_lelang") {
-      const tenders = await TenderModel.find().sort({ createdAt: -1 }).limit(100);
+      // Hanya ambil Tender yang TIDAK memiliki kata "belanja" (Jasa murni)
+      const tenders = await TenderModel.find({ nama_paket: { $not: /belanja/i } }).sort({ createdAt: -1 }).limit(2500);
       data = tenders.map(t => ({
         id: t._id.toString(),
         nama_paket: t.nama_paket,
@@ -24,8 +25,12 @@ export async function GET(req: NextRequest) {
         created_at: t.createdAt
       }));
     } else if (table === "produk") {
-      const products = await ProductModel.find().sort({ createdAt: -1 }).limit(100);
-      data = products.map(p => ({
+      // Ambil produk dari Marketplace
+      const products = await ProductModel.find().sort({ createdAt: -1 }).limit(2500);
+      // Ambil Barang dari LPSE (Tender yang memiliki kata "belanja")
+      const lpseBarang = await TenderModel.find({ nama_paket: /belanja/i }).sort({ createdAt: -1 }).limit(2500);
+      
+      const mappedProducts = products.map(p => ({
         id: p._id.toString(),
         nama_produk: p.nama_produk,
         nama_perusahaan: p.nama_perusahaan,
@@ -33,6 +38,20 @@ export async function GET(req: NextRequest) {
         harga: p.harga,
         created_at: p.createdAt
       }));
+
+      const mappedLpseBarang = lpseBarang.map(t => ({
+        id: t._id.toString(),
+        nama_produk: t.nama_paket,
+        nama_perusahaan: t.instansi, // LPSE tidak punya nama_perusahaan, gunakan instansi
+        kategori: t.kategori,
+        harga: t.pagu,
+        created_at: t.createdAt
+      }));
+
+      data = [...mappedLpseBarang, ...mappedProducts].sort((a, b) => {
+        // Urutkan gabungan berdasarkan createdAt terbaru
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }).slice(0, 2500); // Batasi total maksimal 2500
     } else {
       return NextResponse.json({ error: "Tabel tidak valid" }, { status: 400 });
     }

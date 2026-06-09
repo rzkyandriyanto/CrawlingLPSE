@@ -101,13 +101,13 @@ export default function LoginPage() {
             {/* Input Email */}
             <div className="space-y-1.5">
               <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                Email Perusahaan
+                Email
               </label>
               <input
                 type="email"
                 required
                 className="w-full px-4 py-3.5 rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-input)] focus:ring-2 focus:ring-black outline-none transition text-sm sm:text-base text-[var(--text-primary)] shadow-sm"
-                placeholder="nama@perusahaan.com"
+                placeholder="nama@email.com"
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>

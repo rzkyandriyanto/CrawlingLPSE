@@ -159,12 +159,35 @@ export default function Sidebar({
                     className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-full bg-[var(--accent)]"
                   />
                 )}
-                <item.icon
-                  size={16}
-                  strokeWidth={isActive ? 2.5 : 2}
-                  className="flex-shrink-0 transition-transform duration-150"
-                />
-                {isOpen && <span className="flex-1 truncate">{item.name}</span>}
+                {/* Icon wrapper for badge */}
+                <span className="relative flex-shrink-0">
+                  <item.icon
+                    size={16}
+                    strokeWidth={isActive ? 2.5 : 2}
+                    className="transition-transform duration-150"
+                  />
+                  {item.key === "notifikasi" && unreadNotifCount > 0 && (
+                    <span
+                      className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] px-0.5 rounded-full flex items-center justify-center text-[8px] font-black text-white"
+                      style={{ background: "#ef4444", boxShadow: "0 1px 4px rgba(239,68,68,0.5)" }}
+                    >
+                      {unreadNotifCount > 99 ? "99+" : unreadNotifCount}
+                    </span>
+                  )}
+                </span>
+                {isOpen && (
+                  <>
+                    <span className="flex-1 truncate">{item.name}</span>
+                    {item.key === "notifikasi" && unreadNotifCount > 0 && (
+                      <span
+                        className="text-[10px] font-black px-2 py-0.5 rounded-full tabular-nums text-white"
+                        style={{ background: "#ef4444" }}
+                      >
+                        {unreadNotifCount > 99 ? "99+" : unreadNotifCount}
+                      </span>
+                    )}
+                  </>
+                )}
               </Link>
             );
           })}
@@ -209,14 +232,6 @@ export default function Sidebar({
                     strokeWidth={isActive ? 2.5 : 2}
                     className="transition-transform duration-150"
                   />
-                  {item.key === "notifikasi" && unreadNotifCount > 0 && (
-                    <span
-                      className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] px-0.5 rounded-full flex items-center justify-center text-[8px] font-black text-white"
-                      style={{ background: "#ef4444", boxShadow: "0 1px 4px rgba(239,68,68,0.5)" }}
-                    >
-                      {unreadNotifCount > 99 ? "99+" : unreadNotifCount}
-                    </span>
-                  )}
                 </span>
                 {isOpen && (
                   <>
@@ -230,14 +245,6 @@ export default function Sidebar({
                           }`}
                       >
                         {pinnedItemsCount}
-                      </span>
-                    )}
-                    {item.key === "notifikasi" && unreadNotifCount > 0 && (
-                      <span
-                        className="text-[10px] font-black px-2 py-0.5 rounded-full tabular-nums text-white"
-                        style={{ background: "#ef4444" }}
-                      >
-                        {unreadNotifCount > 99 ? "99+" : unreadNotifCount}
                       </span>
                     )}
                   </>

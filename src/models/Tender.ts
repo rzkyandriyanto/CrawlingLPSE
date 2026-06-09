@@ -6,6 +6,8 @@ const TenderSchema = new mongoose.Schema({
   instansi: String,
   hps: String,
   pagu: String,
+  pagu_num: { type: Number, default: 0, index: true }, // Nilai numerik Pagu untuk agregasi BI
+  hps_num: { type: Number, default: 0 },  // Nilai numerik HPS untuk agregasi BI
   kategori: String,
   tag: String,
   metode_pengadaan: String,
@@ -13,12 +15,14 @@ const TenderSchema = new mongoose.Schema({
   url_lpse: String,
   jadwal: [
     {
+
       tahap: String,
       mulai: String,
       sampai: String,
       perubahan: String
     }
   ],
+  alasan_diulang: String,
   pinned_by_users: { type: [String], default: [] },
   finished_at: { type: Date },
   ai_summary: { type: String, default: null },
@@ -33,6 +37,7 @@ const TenderSchema = new mongoose.Schema({
   archived_at: { type: Date, default: null }, // Kapan masuk arsip → hapus setelah 3 hari
   archived_reason: { type: String, default: null }, // Alasan pengarsipan
   archived_by: { type: String, default: null }, // userId yang mengarsipkan
+  is_deleted: { type: Boolean, default: false, index: true }, // Soft delete flag untuk keperluan analisis
 
 }, { timestamps: true });
 

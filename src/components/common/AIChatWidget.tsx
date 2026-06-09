@@ -2,7 +2,9 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageCircle, X, Send, Sparkles, Bot, User, Loader2 } from "lucide-react";
+import { MessageCircle, X, Send, Sparkles, Bot, User, Loader2, History, Plus, Trash2 } from "lucide-react";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useDashboard } from "@/app/dashboard/DashboardContext";
 
 type Message = {
@@ -10,14 +12,125 @@ type Message = {
   content: string;
 };
 
+type ChatSession = {
+  id: string;
+  title: string;
+  messages: Message[];
+  updatedAt: number;
+};
+
+const DetailLinkButton = ({ tenderId, children, setSelectedItem }: { tenderId: string, children: React.ReactNode, setSelectedItem: any }) => {
+  const [loading, setLoading] = useState(false);
+
+  return (
+    <button
+      onClick={async (e) => {
+        e.preventDefault();
+        if (loading) return;
+        setLoading(true);
+        try {
+          const res = await fetch(`/api/tenders/detail?id=${encodeURIComponent(tenderId)}`);
+          if (!res.ok) throw new Error("Gagal mengambil data tender");
+          const data = await res.json();
+          if (data.tender) setSelectedItem(data.tender);
+        } catch (err) {
+          console.error(err);
+          alert("Gagal membuka detail tender.");
+        } finally {
+          setLoading(false);
+        }
+      }}
+      className={`text-violet-600 hover:text-violet-700 font-bold transition-all cursor-pointer outline-none bg-transparent inline-flex items-center gap-1.5 ${loading ? "animate-pulse opacity-70" : "hover:underline"}`}
+    >
+      {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+      {children}
+    </button>
+  );
+};
+
 export default function AIChatWidget() {
-  const { user, language } = useDashboard();
+  const { user, language, setSelectedItem } = useDashboard();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Load history on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("tender_ai_chats");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setSessions(parsed);
+        if (parsed.length > 0) {
+          setActiveSessionId(parsed[0].id);
+          setMessages(parsed[0].messages);
+        }
+      } catch {}
+    }
+  }, []);
+
+  // Save history on changes
+  useEffect(() => {
+    if (messages.length === 0 && !activeSessionId) return;
+    if (!streaming && messages.length > 0) {
+      setSessions(prev => {
+        let updated = [...prev];
+        let currentIdx = updated.findIndex(s => s.id === activeSessionId);
+        const newId = activeSessionId || Date.now().toString();
+        if (!activeSessionId) setActiveSessionId(newId);
+
+        // Helper to generate a meaningful title
+        const generateTitle = (msgs: Message[]) => {
+          const userMsgs = msgs.filter(m => m.role === "user");
+          let targetMsg = userMsgs[0];
+          for (const msg of userMsgs) {
+            // Find first message that is somewhat descriptive
+            if (msg.content.length > 15 || msg.content.split(" ").length > 3) {
+              targetMsg = msg;
+              break;
+            }
+          }
+          if (!targetMsg) return "Chat Baru";
+          let t = targetMsg.content.trim();
+          t = t.charAt(0).toUpperCase() + t.slice(1);
+          return t.length > 35 ? t.slice(0, 35) + "..." : t;
+        };
+
+        const sessionTitle = generateTitle(messages);
+
+        if (currentIdx === -1) {
+          const newSession = {
+            id: newId,
+            title: sessionTitle,
+            messages: messages,
+            updatedAt: Date.now()
+          };
+          updated = [newSession, ...updated];
+        } else {
+          updated[currentIdx] = {
+            ...updated[currentIdx],
+            title: sessionTitle, // Update title dynamically as conversation progresses
+            messages: messages,
+            updatedAt: Date.now()
+          };
+          // move to top if not already
+          if (currentIdx !== 0) {
+            const session = updated.splice(currentIdx, 1)[0];
+            updated.unshift(session);
+          }
+        }
+        localStorage.setItem("tender_ai_chats", JSON.stringify(updated));
+        return updated;
+      });
+    }
+  }, [messages, streaming, activeSessionId]);
 
   // Auto-scroll to bottom on new message
   useEffect(() => {
@@ -26,8 +139,33 @@ export default function AIChatWidget() {
 
   // Focus input when opened
   useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 300);
-  }, [open]);
+    if (open && !showHistory) setTimeout(() => inputRef.current?.focus(), 300);
+  }, [open, showHistory]);
+
+  const handleNewChat = () => {
+    setMessages([]);
+    setActiveSessionId(null);
+    setShowHistory(false);
+  };
+
+  const loadSession = (id: string) => {
+    const session = sessions.find(s => s.id === id);
+    if (session) {
+      setMessages(session.messages);
+      setActiveSessionId(id);
+      setShowHistory(false);
+    }
+  };
+  
+  const deleteSession = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newSessions = sessions.filter(s => s.id !== id);
+    setSessions(newSessions);
+    localStorage.setItem("tender_ai_chats", JSON.stringify(newSessions));
+    if (activeSessionId === id) {
+      handleNewChat();
+    }
+  };
 
   const sendMessage = async () => {
     const text = input.trim();
@@ -56,7 +194,29 @@ export default function AIChatWidget() {
         }),
       });
 
-      if (!res.ok || !res.body) throw new Error("Gagal menghubungi AI");
+      if (!res.ok) {
+        let errMsg = "Gagal menghubungi AI";
+        try {
+          const errData = await res.json();
+          if (errData.error) errMsg = errData.error;
+        } catch {}
+        throw new Error(errMsg);
+      }
+      if (!res.body) throw new Error("Gagal menghubungi AI");
+
+      const contentType = res.headers.get("Content-Type") || "";
+      if (contentType.includes("application/json")) {
+        const json = await res.json();
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            role: "assistant",
+            content: json.content,
+          };
+          return updated;
+        });
+        return;
+      }
 
       // Stream response
       const reader = res.body.getReader();
@@ -92,11 +252,15 @@ export default function AIChatWidget() {
         }
       }
     } catch (err: any) {
+      let finalMsg = err.message || "Maaf, terjadi kesalahan. Coba lagi ya.";
+      if (finalMsg.toLowerCase().includes("credits") || finalMsg.toLowerCase().includes("afford")) {
+        finalMsg = "Maaf, akun OpenRouter API Anda kehabisan kredit/saldo untuk memproses permintaan ini. Silakan isi ulang kredit Anda di OpenRouter.";
+      }
       setMessages((prev) => {
         const updated = [...prev];
         updated[updated.length - 1] = {
           role: "assistant",
-          content: "Maaf, terjadi kesalahan. Coba lagi ya.",
+          content: finalMsg,
         };
         return updated;
       });
@@ -135,11 +299,6 @@ export default function AIChatWidget() {
             </motion.div>
           )}
         </AnimatePresence>
-        {/* Pulse ring */}
-        {!open && (
-          <span className="absolute inset-0 rounded-full animate-ping opacity-20"
-            style={{ background: "linear-gradient(135deg, #7c3aed, #4f46e5)" }} />
-        )}
       </motion.button>
 
       {/* ── Chat Panel ──────────────────────────────────────── */}
@@ -164,37 +323,81 @@ export default function AIChatWidget() {
                 style={{ background: "linear-gradient(135deg, #7c3aed, #4f46e5)" }}>
                 <Bot className="w-5 h-5 text-white" />
               </div>
-              <div>
+              <div className="flex-1">
                 <p className="font-extrabold text-sm" style={{ color: "var(--text-primary)" }}>TenderAI</p>
                 <p className="text-[10px]" style={{ color: "var(--text-secondary)" }}>
                   {language === "EN" ? "AI Tender Assistant" : "Asisten Tender Cerdas"}
                 </p>
               </div>
-              <span className="ml-auto flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full"
-                style={{ backgroundColor: "rgba(34,197,94,0.1)", color: "#16a34a" }}>
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
-                Online
-              </span>
+              
+              <div className="flex items-center gap-1.5">
+                <button 
+                  onClick={() => setShowHistory(!showHistory)}
+                  className={`p-1.5 rounded-lg transition-colors ${showHistory ? 'bg-violet-100 text-violet-700' : 'text-gray-500 hover:bg-gray-100'}`}
+                  title="Riwayat Chat"
+                >
+                  <History className="w-4 h-4" />
+                </button>
+                <button 
+                  onClick={handleNewChat}
+                  className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+                  title="Chat Baru"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {messages.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
-                    style={{ background: "linear-gradient(135deg, #7c3aed22, #4f46e511)" }}>
-                    <Sparkles className="w-6 h-6 text-violet-500" />
+            {/* Body */}
+            {showHistory ? (
+              <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider mb-3 text-gray-500">Riwayat Obrolan</h3>
+                {sessions.length === 0 ? (
+                  <div className="text-center text-sm text-gray-400 py-8">Belum ada riwayat chat</div>
+                ) : (
+                  sessions.map(session => (
+                    <div 
+                      key={session.id}
+                      onClick={() => loadSession(session.id)}
+                      className={`p-3 rounded-xl cursor-pointer border transition-all flex items-center gap-3 group ${activeSessionId === session.id ? 'border-violet-300 bg-violet-50/50' : 'border-transparent hover:bg-gray-50'}`}
+                    >
+                      <MessageCircle className={`w-5 h-5 flex-shrink-0 ${activeSessionId === session.id ? 'text-violet-500' : 'text-gray-400'}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-semibold truncate ${activeSessionId === session.id ? 'text-violet-700' : 'text-gray-700'}`}>
+                          {session.title}
+                        </p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          {new Date(session.updatedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                      <button 
+                        onClick={(e) => deleteSession(session.id, e)}
+                        className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {messages.length === 0 && (
+                  <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
+                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                      style={{ background: "linear-gradient(135deg, #7c3aed22, #4f46e511)" }}>
+                      <Sparkles className="w-6 h-6 text-violet-500" />
+                    </div>
+                    <p className="font-extrabold text-sm" style={{ color: "var(--text-primary)" }}>
+                      {language === "EN" ? "Ask anything about tenders!" : "Tanya apa saja tentang tender!"}
+                    </p>
+                    <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                      {language === "EN"
+                        ? "e.g. \"What is HPS?\", \"Find construction tenders in Jakarta\""
+                        : "mis. \"Apa itu HPS?\", \"Cara mengikuti tender konstruksi\""}
+                    </p>
                   </div>
-                  <p className="font-extrabold text-sm" style={{ color: "var(--text-primary)" }}>
-                    {language === "EN" ? "Ask anything about tenders!" : "Tanya apa saja tentang tender!"}
-                  </p>
-                  <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-                    {language === "EN"
-                      ? "e.g. \"What is HPS?\", \"Find construction tenders in Jakarta\""
-                      : "mis. \"Apa itu HPS?\", \"Cara mengikuti tender konstruksi\""}
-                  </p>
-                </div>
-              )}
+                )}
 
               {messages.map((msg, i) => (
                 <div key={i} className={`flex gap-2.5 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
@@ -217,7 +420,55 @@ export default function AIChatWidget() {
                       ? { background: "linear-gradient(135deg, #7c3aed, #4f46e5)" }
                       : { backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)" }
                     }>
-                    {msg.content || (
+                    {msg.content ? (
+                      msg.role === "assistant" ? (
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
+                            ul: ({node, ...props}) => <ul className="list-disc pl-4 mb-2" {...props} />,
+                            ol: ({node, ...props}) => <ol className="list-decimal pl-4 mb-2" {...props} />,
+                            li: ({node, ...props}) => <li className="mb-1" {...props} />,
+                            strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
+                            a: ({node, ...props}) => {
+                              const href = props.href || "";
+                              if (href.startsWith("/dashboard?view=detail&id=")) {
+                                const idMatch = href.match(/id=([^&]+)/);
+                                if (idMatch) {
+                                  return (
+                                    <DetailLinkButton tenderId={idMatch[1]} setSelectedItem={setSelectedItem}>
+                                      {props.children}
+                                    </DetailLinkButton>
+                                  );
+                                }
+                              }
+                              return <a className="text-violet-600 hover:text-violet-700 hover:underline font-bold transition-colors" target="_blank" rel="noopener noreferrer" {...props} />;
+                            },
+                            blockquote: ({node, ...props}) => (
+                              <blockquote 
+                                className="my-3 p-3 rounded-xl border border-violet-200 bg-white shadow-sm hover:shadow-md transition-shadow relative overflow-hidden" 
+                                style={{ borderLeft: "4px solid #7c3aed" }}
+                                {...props} 
+                              />
+                            ),
+                            table: ({node, ...props}) => (
+                              <div className="overflow-x-auto my-4 w-full rounded-xl border border-violet-100 shadow-sm custom-scrollbar">
+                                <table className="w-full text-left border-collapse min-w-[500px]" {...props} />
+                              </div>
+                            ),
+                            thead: ({node, ...props}) => <thead className="bg-violet-50/50 text-violet-900 text-xs uppercase tracking-wide" {...props} />,
+                            tbody: ({node, ...props}) => <tbody className="bg-white divide-y divide-violet-50" {...props} />,
+                            tr: ({node, ...props}) => <tr className="hover:bg-violet-50/30 transition-colors" {...props} />,
+                            th: ({node, ...props}) => <th className="p-3 font-semibold border-b border-violet-100 whitespace-nowrap" {...props} />,
+                            td: ({node, ...props}) => <td className="p-3 text-xs align-middle" {...props} />
+                          }}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
+                      ) : (
+                        msg.content
+                      )
+                    ) : (
                       <span className="flex gap-1 items-center h-4">
                         <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "0ms" }} />
                         <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -229,8 +480,10 @@ export default function AIChatWidget() {
               ))}
               <div ref={bottomRef} />
             </div>
+            )}
 
             {/* Input Area */}
+            {!showHistory && (
             <div className="flex items-end gap-2.5 px-3 py-3 border-t flex-shrink-0"
               style={{ borderColor: "var(--border-subtle)" }}>
               <textarea
@@ -267,6 +520,7 @@ export default function AIChatWidget() {
                 }
               </button>
             </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

@@ -107,6 +107,9 @@ async function scrapeInfoTender(slug: string, lelangId: string): Promise<Record<
       // ── Kualifikasi Usaha
       result.kualifikasi_usaha = findByLabel("Kualifikasi Usaha");
 
+      // ── Alasan Diulang / Batal
+      result.alasan_diulang = findByLabel("Alasan di ulang") || findByLabel("alasan di ulang") || findByLabel("Alasan pembatalan") || findByLabel("alasan pembatalan");
+
       // ── Syarat Kualifikasi (teks panjang - cari section khusus)
       let syaratKualifikasi = "";
       const allTh = Array.from(document.querySelectorAll("th"));
@@ -181,22 +184,19 @@ async function scrapeInfoTender(slug: string, lelangId: string): Promise<Record<
       return result;
     });
 
-    // ── Ekstraksi Pemenang & Evaluasi Jika Tender Sudah Selesai ──
+    // ── Ekstraksi Pemenang ──
     const tahap = String(data.tahap_saat_ini || "").toLowerCase();
     const isFinished = tahap.includes("selesai") || tahap.includes("pemenang");
 
-    if (isFinished) {
-      data.status = "selesai";
+    if (isFinished || data.url_pemenang) {
+      if (isFinished) data.status = "selesai";
       const urlPemenang = (typeof data.url_pemenang === "string" && data.url_pemenang) ? data.url_pemenang : `${BASE_DOMAIN}/${slug}/evaluasi/${lelangId}/pemenang`;
-      const urlEvaluasi = (typeof data.url_hasil_evaluasi === "string" && data.url_hasil_evaluasi) ? data.url_hasil_evaluasi : `${BASE_DOMAIN}/${slug}/evaluasi/${lelangId}/hasil`;
 
-      // 1. Scrape Pemenang
       try {
         await page.goto(urlPemenang, { waitUntil: "domcontentloaded", timeout: 25000 });
         
         const pemenangData = await page.evaluate(() => {
           const res: any = {};
-          // Coba metode 1: Tabel vertikal (th bersebelahan dengan td)
           const elements = Array.from(document.querySelectorAll("th, td"));
           for (let i = 0; i < elements.length; i++) {
             const el = elements[i];
@@ -213,7 +213,6 @@ async function scrapeInfoTender(slug: string, lelangId: string): Promise<Record<
             }
           }
 
-          // Coba metode 2: Tabel horizontal (th di baris pertama, td di baris kedua)
           if (!res.pemenang_nama) {
             const ths = Array.from(document.querySelectorAll("th"));
             const thNamaIndex = ths.findIndex(th => { const t = th.textContent?.trim().toLowerCase() || ""; return t.includes("nama pemenang") || t === "nama penyedia"; });
@@ -221,10 +220,7 @@ async function scrapeInfoTender(slug: string, lelangId: string): Promise<Record<
             if (thNamaIndex !== -1) {
               const thNamaEl = ths[thNamaIndex] as HTMLTableCellElement;
               const cellIndex = thNamaEl.cellIndex;
-              
-              // Cari baris data berikutnya
               let nextTr = thNamaEl.parentElement?.nextElementSibling;
-              // Jika thead/tbody terpisah
               if (!nextTr && thNamaEl.closest("thead")) {
                 nextTr = thNamaEl.closest("table")?.querySelector("tbody tr");
               }
@@ -233,7 +229,6 @@ async function scrapeInfoTender(slug: string, lelangId: string): Promise<Record<
                 const tds = Array.from(nextTr.querySelectorAll("td"));
                 if (tds[cellIndex]) res.pemenang_nama = tds[cellIndex].textContent?.replace(/\s+/g, " ").trim();
                 
-                // Cari elemen lainnya di TR yang sama
                 const thAlamatEl = thNamaEl.parentElement?.querySelector("th:nth-child(" + (cellIndex + 2) + ")");
                 const thAlamatText = thAlamatEl?.textContent?.trim().toLowerCase() || "";
                 if (thAlamatText.includes("alamat")) res.pemenang_alamat = tds[cellIndex + 1]?.textContent?.replace(/\s+/g, " ").trim();
@@ -254,8 +249,14 @@ async function scrapeInfoTender(slug: string, lelangId: string): Promise<Record<
       } catch (e) {
         console.log("[sync-info] Gagal scrape pemenang:", e);
       }
+    }
 
-      // 2. Scrape Hasil Evaluasi
+    // ── Ekstraksi Hasil Evaluasi ──
+    const hasEvaluasiTab = !!data.url_hasil_evaluasi;
+    const isEvaluasiStage = tahap.includes("evaluasi") || tahap.includes("penetapan") || tahap.includes("sanggah") || isFinished;
+
+    if (hasEvaluasiTab || isEvaluasiStage) {
+      const urlEvaluasi = (typeof data.url_hasil_evaluasi === "string" && data.url_hasil_evaluasi) ? data.url_hasil_evaluasi : `${BASE_DOMAIN}/${slug}/evaluasi/${lelangId}/hasil`;
       try {
         await page.goto(urlEvaluasi, { waitUntil: "domcontentloaded", timeout: 25000 });
         const evaluasiData = await page.evaluate(() => {
@@ -324,12 +325,17 @@ export async function GET(
     const needsStatusUpdate = isFinishedInDB && tender?.status !== "selesai";
     const missingWinnerData = tender?.status === "selesai" && !tender?.pemenang_nama;
     const missingSyaratHtml = tender?.syarat_kualifikasi && !tender.syarat_kualifikasi.includes("<table");
+    
+    // Cek apakah tender sudah di tahap evaluasi/selesai tapi data evaluasi masih kosong
+    const isEvaluasiStageDB = tahapSaatIniDB.includes("evaluasi") || tahapSaatIniDB.includes("penetapan") || tahapSaatIniDB.includes("sanggah") || isFinishedInDB;
+    const missingEvaluasiData = isEvaluasiStageDB && (!tender?.peserta_evaluasi || !tender.peserta_evaluasi.rows || tender.peserta_evaluasi.rows.length === 0);
 
     // Jika sudah ada data dan masih segar (< 24 jam), DAN tidak membutuhkan update status/data pemenang, kembalikan langsung
     if (
       !needsStatusUpdate &&
       !missingWinnerData &&
       !missingSyaratHtml &&
+      !missingEvaluasiData &&
       tender?.info_synced_at &&
       tender?.satuan_kerja &&
       Date.now() - new Date(tender.info_synced_at).getTime() < CACHE_DURATION_MS
@@ -353,6 +359,7 @@ export async function GET(
           metode_pengadaan:  tender.metode_pengadaan,
           hps:               tender.hps,
           pagu:              tender.pagu,
+          alasan_diulang:    tender.alasan_diulang,
           info_synced_at:    tender.info_synced_at,
           url_hasil_evaluasi:tender.url_hasil_evaluasi,
           url_pemenang:      tender.url_pemenang,
@@ -395,6 +402,10 @@ export async function GET(
       if (!tender?.archived_at) {
         updatePayload.archived_at = now;
         updatePayload.archived_reason = "Tender telah selesai";
+      }
+      // Jika data pemenang berhasil diambil → update status ke "menang"
+      if (scrapedData.pemenang_nama && String(scrapedData.pemenang_nama).trim().length > 2) {
+        updatePayload.status = "menang";
       }
     }
 

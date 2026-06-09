@@ -111,7 +111,7 @@ export default function ProfileView({
                       type="email"
                       value={profileForm.email}
                       onChange={(e) => onFormChange("email", e.target.value)}
-                      placeholder={language === "EN" ? "Company Email" : "Email Perusahaan"}
+                      placeholder={language === "EN" ? "Email" : "Email"}
                       className="w-full px-4 py-2.5 rounded-xl border outline-none transition-all text-sm font-semibold"
                       style={{ backgroundColor: "var(--bg-input)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }}
                     />

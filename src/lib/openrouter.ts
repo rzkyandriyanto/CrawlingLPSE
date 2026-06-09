@@ -5,8 +5,11 @@
  */
 
 export type ChatMessage = {
-  role: "system" | "user" | "assistant";
-  content: string;
+  role: "system" | "user" | "assistant" | "tool";
+  content?: string | null;
+  tool_calls?: any[];
+  tool_call_id?: string;
+  name?: string;
 };
 
 export type OpenRouterOptions = {
@@ -15,6 +18,8 @@ export type OpenRouterOptions = {
   stream?: boolean;
   maxTokens?: number;
   temperature?: number;
+  tools?: any[];
+  tool_choice?: "auto" | "none" | any;
 };
 
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1/chat/completions";
@@ -31,11 +36,13 @@ export async function callOpenRouter(options: OpenRouterOptions): Promise<Respon
     stream = false,
     maxTokens = 1024,
     temperature = 0.7,
+    tools,
+    tool_choice,
   } = options;
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env.OPENROUTER_CHAT_API_KEY || process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
-    throw new Error("OPENROUTER_API_KEY tidak ditemukan di environment variables.");
+    throw new Error("OPENROUTER_CHAT_API_KEY atau OPENROUTER_API_KEY tidak ditemukan di environment variables.");
   }
 
   const res = await fetch(OPENROUTER_BASE, {
@@ -52,6 +59,8 @@ export async function callOpenRouter(options: OpenRouterOptions): Promise<Respon
       stream,
       max_tokens: maxTokens,
       temperature,
+      ...(tools && tools.length > 0 ? { tools } : {}),
+      ...(tool_choice ? { tool_choice } : {}),
     }),
   });
 

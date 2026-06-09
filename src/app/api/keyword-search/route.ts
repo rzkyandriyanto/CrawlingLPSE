@@ -85,13 +85,15 @@ function calcRelevanceScore(
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { keyword, bidang = [], filterWilayah, filterTipe, offset = 0, userId } = body;
+    const { keyword, bidang = [], filterWilayah, filterTipe, filterStatus, offset = 0, userId } = body;
 
     const trimmedKeyword = (keyword || "").trim();
     const targetLpse = filterWilayah || "";
     const tipe = filterTipe || "";
+    const statusFilter = filterStatus || "Aktif";
 
     let items: object[] = [];
+    let userProfile: any = null;
 
     await connectToDatabase();
 
@@ -99,11 +101,51 @@ export async function POST(req: NextRequest) {
     // QUERY TABEL 1: paket_lelang (Jasa - dari LPSE)
     // ============================================================
     if (tipe === "" || tipe === "Jasa" || tipe === "Barang") {
-      let query: any = { status: { $nin: ["selesai", "menang"] } };
+      let query: any = { is_deleted: { $ne: true } };
+
+      if (statusFilter === "Aktif") {
+        const threeDaysAgo = new Date();
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+        query.$or = [
+          {
+            status: { $nin: ["selesai", "menang", "batal", "gagal"] },
+            tahap_saat_ini: { $not: /selesai|batal|gagal|penunjukan|sppbj|penandatanganan|kontrak/i }
+          },
+          {
+            status: { $in: ["selesai", "menang", "batal", "gagal"] },
+            finished_at: { $gte: threeDaysAgo }
+          },
+          {
+            tahap_saat_ini: { $regex: /selesai|batal|gagal|penunjukan|sppbj|penandatanganan|kontrak/i },
+            updatedAt: { $gte: threeDaysAgo }
+          }
+        ];
+      } else if (statusFilter === "Selesai") {
+        query.$or = [
+          { status: { $in: ["selesai", "menang"] } },
+          { tahap_saat_ini: { $regex: /selesai|penunjukan|sppbj|penandatanganan|kontrak/i } }
+        ];
+      } else if (statusFilter === "Gagal") {
+        query.$or = [
+          { status: { $in: ["batal", "gagal"] } },
+          { tahap_saat_ini: { $regex: /batal|gagal/i } }
+        ];
+      } else if (statusFilter === "Diulang") {
+        query.$or = [
+          { status: { $in: ["batal", "gagal"] } },
+          { tahap_saat_ini: { $regex: /batal|gagal|ulang/i } },
+          { nama_paket: { $regex: /ulang|gagal/i } }
+        ];
+      }
+      // Jika "Semua", tidak ada filter status/tahap yang diterapkan.
+
       let andConditions: any[] = [];
 
       if (trimmedKeyword) {
-        andConditions.push({ nama_paket: { $regex: trimmedKeyword, $options: "i" } });
+        const queryWords = trimmedKeyword.split(/\s+/).filter(Boolean);
+        queryWords.forEach((qw: string) => {
+          andConditions.push({ nama_paket: { $regex: qw, $options: "i" } });
+        });
       }
       
       if (tipe === "Jasa") {
@@ -112,8 +154,15 @@ export async function POST(req: NextRequest) {
         andConditions.push({ nama_paket: { $regex: /belanja/i } });
       }
 
+      // Menggunakan STRICT FILTER: Hanya data yang cocok dengan bidang user yang akan diambil
       if (bidang && bidang.length > 0) {
-        const orConditions = bidang.map((b: string) => ({ nama_paket: { $regex: b, $options: "i" } }));
+        const orConditions: any[] = [];
+        bidang.forEach((b: string) => {
+          // Hanya filter berdasarkan tag atau kategori, jangan nama_paket agar tidak salah tangkap (false positive)
+          orConditions.push({ tag: { $regex: `^${b}$`, $options: "i" } });
+          orConditions.push({ tag: { $regex: b, $options: "i" } }); // fallback
+          orConditions.push({ kategori: { $regex: b, $options: "i" } });
+        });
         andConditions.push({ $or: orConditions });
       }
 
@@ -156,14 +205,12 @@ export async function POST(req: NextRequest) {
             }
           }
         },
-        { $sort: { tahap_weight: 1, createdAt: -1 } },
-        { $limit: 1500 } // Ambil lebih banyak item agar daerah user yang tahap_weight-nya rendah tidak terpotong
+        { $sort: { tahap_weight: 1, createdAt: -1 } }
       ];
 
       const jasaData = await TenderModel.aggregate(pipeline);
 
       // ── Ambil profil personalisasi user (jika userId tersedia) ──
-      let userProfile: any = null;
       if (userId) {
         try {
           const userDoc = await UserModel.findById(userId)
@@ -228,6 +275,9 @@ export async function POST(req: NextRequest) {
         jadwal: row.jadwal,
         ai_summary: row.ai_summary,
         created_at: row.createdAt,
+        status: row.status,
+        tahap_saat_ini: row.tahap_saat_ini,
+        pemenang_nama: row.pemenang_nama,
         // Tahap weight sudah dihitung di DB pipeline (untuk sort compound)
         _tahap_weight: row.tahap_weight ?? 99,
         relevance_score: calcRelevanceScore(row, userProfile),
@@ -244,7 +294,15 @@ export async function POST(req: NextRequest) {
       let query: any = {};
 
       if (trimmedKeyword) {
-        query.nama_produk = { $regex: trimmedKeyword, $options: "i" };
+        const queryWords = trimmedKeyword.split(/\s+/).filter(Boolean);
+        if (queryWords.length > 1) {
+          if (!query.$and) query.$and = [];
+          queryWords.forEach((qw: string) => {
+            query.$and.push({ nama_produk: { $regex: qw, $options: "i" } });
+          });
+        } else {
+          query.nama_produk = { $regex: trimmedKeyword, $options: "i" };
+        }
       }
       if (bidang && bidang.length > 0) {
         const orConditions = bidang.map((b: string) => ({ tag: b }));
@@ -304,16 +362,31 @@ export async function POST(req: NextRequest) {
       items = [...items, ...filteredProduk];
     }
 
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
     items.sort((a: any, b: any) => {
+      const isFinishedA = a.status === "selesai" || a.status === "menang" || a.status === "batal" || a.status === "gagal" || (a.tahap_saat_ini && /selesai|batal|gagal|penunjukan|sppbj|penandatanganan|kontrak/i.test(a.tahap_saat_ini));
+      const dateA = a.finished_at ? new Date(a.finished_at) : (a.updatedAt ? new Date(a.updatedAt) : new Date(0));
+      const isOldFinishedA = isFinishedA && dateA < threeDaysAgo;
+
+      const isFinishedB = b.status === "selesai" || b.status === "menang" || b.status === "batal" || b.status === "gagal" || (b.tahap_saat_ini && /selesai|batal|gagal|penunjukan|sppbj|penandatanganan|kontrak/i.test(b.tahap_saat_ini));
+      const dateB = b.finished_at ? new Date(b.finished_at) : (b.updatedAt ? new Date(b.updatedAt) : new Date(0));
+      const isOldFinishedB = isFinishedB && dateB < threeDaysAgo;
+
+      // Prioritas 1: Selesai/Gagal yang umurnya > 3 hari ditaruh di paling bawah
+      if (isOldFinishedA && !isOldFinishedB) return 1;
+      if (!isOldFinishedA && isOldFinishedB) return -1;
+
       const twA = a._tahap_weight ?? 99;
       const twB = b._tahap_weight ?? 99;
       const rsA = a.relevance_score ?? 0;
       const rsB = b.relevance_score ?? 0;
 
-      // Utama: Skor relevansi yang lebih tinggi harus tampil di atas
+      // Prioritas 2: Skor relevansi yang lebih tinggi harus tampil di atas
       if (rsA !== rsB) return rsB - rsA;
       
-      // Sekunder: Jika skor relevansi sama, pertahankan hirarki tahap (tahap awal di atas)
+      // Prioritas 3: Jika skor relevansi sama, pertahankan hirarki tahap (tahap awal di atas)
       return twA - twB;
     });
 
@@ -323,11 +396,152 @@ export async function POST(req: NextRequest) {
       return rest;
     });
 
+    // Hitung Leaderboard Pemenang (sebelum paginasi)
+    const winnerMap: Record<string, { count: number; totalValue: number; tenders: any[] }> = {};
+    const lpseMap: Record<string, number> = {};
+    
+    const parsePagu = (paguStr: string) => {
+      if (!paguStr) return 0;
+      return Number(paguStr.replace(/Rp/gi, "").replace(/\./g, "").replace(/,/g, ".").replace(/[^0-9.]/g, "")) || 0;
+    };
+
+    for (const item of cleanItems) {
+      // Hitung LPSE Stats
+      const instansi = item.instansi;
+      if (instansi && instansi.trim() !== "") {
+        const cleanedInstansi = instansi.trim();
+        if (!lpseMap[cleanedInstansi]) lpseMap[cleanedInstansi] = 0;
+        lpseMap[cleanedInstansi] += 1;
+      }
+
+      // Hitung Pemenang
+      const w = item.pemenang_nama;
+      if (w && w !== "-" && w.trim() !== "") {
+        if (!winnerMap[w]) winnerMap[w] = { count: 0, totalValue: 0, tenders: [] };
+        winnerMap[w].count += 1;
+        winnerMap[w].totalValue += parsePagu(item.pagu);
+
+        if (winnerMap[w].tenders.length < 5) {
+          winnerMap[w].tenders.push({
+            id: item.id,
+            nama_paket: item.nama_produk || item.nama_paket,
+            pagu: item.pagu,
+            status: item.status || item.tahap_saat_ini
+          });
+        }
+      }
+    }
+
+    const keywordMap: Record<string, number> = {};
+    const KEYWORDS_UMUM = [
+      // Tindakan Umum
+      "Pengadaan", "Pembangunan", "Penyediaan", "Peningkatan",
+      // Teknologi / IT (bisa barang/jasa)
+      "Laptop", "Komputer", "Server", "Jaringan", "Internet", "Software", "Aplikasi", "Sistem", "Informasi", "Website", "CCTV", "Elektronik", "Lisensi", "Langganan", "Digital", "Data", "Multimedia", "Platform", "Hosting", "Hardware", "Perangkat Keras", "Perangkat Lunak", "TIK", "Fiber", "Optik", "Kabel",
+      // Konstruksi / Infrastruktur
+      "Jalan", "Jembatan", "Gedung", "Sekolah", "Rumah Sakit", "Puskesmas", "Irigasi", "Saluran", "Konstruksi", "Rehabilitasi", "Renovasi", "Pemeliharaan", "Aspal", "Beton", "Paving", "Pagar", "Trotoar", "Drainase", "Sumur", "Bangunan", "Fasilitas", "Taman", "Lampu", "PJU", "Penerangan",
+      "Listrik", "Genset", "AC", "Pendingin", "Suku Cadang", "Ban",
+      "Pertanian", "Peternakan", "Sampah"
+    ];
+
+    const KEYWORDS_BARANG = [
+      "Belanja", "Modal", "Barang",
+      "Obat", "Obat-obatan", "Alat Kesehatan", "Alkes", "Farmasi", "Medis", "RSUD", "Pasien", "Klinik", "Laboratorium", "Reagen", "Vaksin", "Ambulans",
+      "ATK", "Kertas", "Printer", "Fotokopi", "Alat Tulis", "Mebel", "Furniture", "Meja", "Kursi", "Lemari", "Seragam", "Pakaian", "Sepatu", "Tekstil", "Kendaraan", "Mobil", "Motor", "Bus",
+      "Catering", "Makanan", "Minuman", "Sembako", "Pupuk", "Benih", "Bibit"
+    ];
+
+    const KEYWORDS_JASA = [
+      "Jasa", "Konsultansi", "Sewa", "Pembuatan", "Pengembangan", "Penyusunan", "Konsultan",
+      "Event Organizer", "Pelatihan", "Bimtek", "Sertifikasi", "Pameran", "Perencanaan", "Pengawasan", "Audit", "Kajian", "Sosialisasi", "Rapat",
+      "Keamanan", "Satpam", "Cleaning Service", "Kebersihan"
+    ];
+
+    let GOOD_KEYWORDS = [...KEYWORDS_UMUM];
+    if (tipe === "Barang") {
+      GOOD_KEYWORDS = [...GOOD_KEYWORDS, ...KEYWORDS_BARANG];
+    } else if (tipe === "Jasa") {
+      GOOD_KEYWORDS = [...GOOD_KEYWORDS, ...KEYWORDS_JASA];
+    } else {
+      GOOD_KEYWORDS = [...GOOD_KEYWORDS, ...KEYWORDS_BARANG, ...KEYWORDS_JASA];
+    }
+
+    for (const item of cleanItems) {
+      const nameStr = (item.nama_produk || item.nama_paket || "").toLowerCase();
+      // Match against predefined high-quality business keywords
+      for (const kw of GOOD_KEYWORDS) {
+        if (nameStr.includes(kw.toLowerCase())) {
+          keywordMap[kw] = (keywordMap[kw] || 0) + 1;
+        }
+      }
+      // Also add explicit tags if they exist
+      if (item.tag && item.tag !== "Lainnya" && item.tag !== "-" && item.tag !== "Umum") {
+        const t = item.tag.trim();
+        keywordMap[t] = (keywordMap[t] || 0) + 1;
+      }
+    }
+    
+    const topKeywords = Object.entries(keywordMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([w]) => w);
+
+    
+    const leaderboard = Object.entries(winnerMap)
+      .sort((a, b) => {
+        if (b[1].count !== a[1].count) {
+          return b[1].count - a[1].count; // Sort by number of wins first
+        }
+        return b[1].totalValue - a[1].totalValue; // If tied, sort by total pagu value
+      })
+      .slice(0, 5) // Top 5
+      .map(([name, data]) => ({ name, count: data.count, totalValue: data.totalValue, tenders: data.tenders }));
+
+    const lpseStats = Object.entries(lpseMap)
+      .sort((a, b) => b[1] - a[1]) // Sort by count desc
+      .map(([name, count]) => ({ name, count }));
+
+    // Hitung Tender Tahap Awal
+    let domisiliFilters: string[] = [];
+    if (targetLpse && targetLpse !== "Semua Instansi (Otomatis)") {
+      domisiliFilters.push(targetLpse.replace("LPSE ", "").toLowerCase());
+    } else if (userProfile) {
+      if (userProfile.kota) domisiliFilters.push(userProfile.kota.toLowerCase());
+      if (userProfile.provinsi) domisiliFilters.push(userProfile.provinsi.toLowerCase());
+    }
+
+    const earlyStageTenders = cleanItems
+      .filter((item) => {
+        const t = (item.tahap_saat_ini || "").toLowerCase();
+        const isAwal = t.includes("pengumuman") || t.includes("download") || t.includes("pendaftaran");
+        if (!isAwal) return false;
+
+        // Jika user memiliki profil wilayah / memilih target, wajibkan strict match
+        if (domisiliFilters.length > 0) {
+          const w = (item.wilayah || "").toLowerCase();
+          const ins = (item.instansi || "").toLowerCase();
+          const matchDomisili = domisiliFilters.some(df => w.includes(df) || ins.includes(df));
+          
+          // Izinkan tender berskala Nasional (Kementerian, Badan, Lembaga Pusat) menembus filter daerah
+          const isNasional = ins.includes("kementerian") || 
+                             ins.includes("badan") || 
+                             ins.includes("lembaga") || 
+                             ins.includes("mabes") || 
+                             ins.includes("kepolisian") || 
+                             ins.includes("kejaksaan") || 
+                             ins.includes("pusat");
+
+          if (!matchDomisili && !isNasional) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => parsePagu(b.pagu) - parsePagu(a.pagu));
+
     // Paginasi: ambil 10 item sesuai offset
     const numOffset = Number(offset) || 0;
     const paginatedItems = cleanItems.slice(numOffset, numOffset + 10);
 
-    return NextResponse.json({ items: paginatedItems });
+    return NextResponse.json({ items: paginatedItems, leaderboard, lpseStats, earlyStageTenders, topKeywords });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Terjadi kesalahan sistem.";
     console.error("Search API error:", error);

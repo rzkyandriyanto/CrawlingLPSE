@@ -9,12 +9,29 @@ export async function GET() {
     await connectToDatabase();
 
     const userCount = await UserModel.countDocuments();
-    const jasaCount = await TenderModel.countDocuments();
-    const produkCount = await ProductModel.countDocuments();
+    const produkCount = await ProductModel.countDocuments(); // Marketplace
+    
+    // Total LPSE
+    const lpseTotal = await TenderModel.countDocuments();
+    
+    // Breakdown LPSE
+    const tipeBreakdown = await TenderModel.aggregate([
+      {
+        $addFields: {
+          isBarang: { $regexMatch: { input: "$nama_paket", regex: /belanja/i } }
+        }
+      },
+      { $group: { _id: { $cond: ["$isBarang", "Barang", "Jasa"] }, count: { $sum: 1 } } }
+    ]);
+    
+    const lpseBarang = tipeBreakdown.find((t: any) => t._id === "Barang")?.count || 0;
+    const lpseJasa = tipeBreakdown.find((t: any) => t._id === "Jasa")?.count || 0;
 
     return NextResponse.json({
       users: userCount,
-      jasa: jasaCount,
+      jasa: lpseJasa,
+      barang: lpseBarang,
+      lpseTotal: lpseTotal,
       produk: produkCount
     }, { status: 200 });
   } catch (error: any) {

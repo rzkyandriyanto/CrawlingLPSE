@@ -3,6 +3,20 @@ import { useEffect, useState } from "react";
 // supabase import removed
 import { Trash2, Mail, Building2, Shield, Search, MoreVertical } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
+import { PieChart } from "lucide-react";
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-slate-900 text-white text-xs font-bold px-3 py-2 rounded-lg shadow-xl border border-slate-700/50">
+        <p className="opacity-70 mb-1 font-medium">{label}</p>
+        <p className="text-blue-400 text-sm">{payload[0].value} Pengguna</p>
+      </div>
+    );
+  }
+  return null;
+};
 
 export default function UserManagement() {
   const [users, setUsers] = useState<any[]>([]);
@@ -69,6 +83,71 @@ export default function UserManagement() {
           />
         </div>
       </header>
+
+      {/* ── Analisis Bidang User ── */}
+      {users.length > 0 && (
+        <div className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-sm">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+              <PieChart size={20} />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-800 tracking-tight">Analisis Kategori Bidang Pilihan</h2>
+              <p className="text-xs text-slate-500 font-medium">Distribusi minat pengguna berdasarkan bidang yang dipilih saat mendaftar.</p>
+            </div>
+          </div>
+          <div className="h-[240px] w-full">
+            {(() => {
+              const bidangStatsMap: Record<string, number> = {};
+              for (const u of users) {
+                let tags: string[] = [];
+                
+                if (Array.isArray(u.tag)) {
+                  tags = u.tag.map((t: any) => String(t).trim()).filter(Boolean);
+                } else if (typeof u.tag === 'string' && u.tag !== '-') {
+                  tags = u.tag.split(',').map((t: string) => t.trim()).filter(Boolean);
+                }
+                
+                if (tags.length === 0) {
+                  tags = ["Semua Bidang"];
+                }
+                
+                // Tambahkan frekuensi masing-masing tag yang sudah bersih
+                for (const t of tags) {
+                  bidangStatsMap[t] = (bidangStatsMap[t] || 0) + 1;
+                }
+              }
+              const topBidang = Object.entries(bidangStatsMap)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10)
+                .map(([name, count]) => ({ name, count }));
+
+              return (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={topBidang} layout="vertical" margin={{ top: 0, right: 30, left: 30, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                    <XAxis type="number" hide />
+                    <YAxis 
+                      dataKey="name" 
+                      type="category" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#64748b', fontSize: 11, fontWeight: 600 }}
+                      width={160}
+                    />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc' }} />
+                    <Bar dataKey="count" radius={[0, 6, 6, 0]} barSize={20}>
+                      {topBidang.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={index < 3 ? '#3b82f6' : '#cbd5e1'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">

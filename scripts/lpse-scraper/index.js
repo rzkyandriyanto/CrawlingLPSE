@@ -131,24 +131,77 @@ function stripHtml(html) {
 function classifyPaket(nama) {
   const n = (nama || "").toLowerCase();
   const map = [
-    { tag: "Teknologi & Informasi", kw: ["sistem informasi","aplikasi","software","hardware","server","jaringan","komputer","laptop","internet","website","cloud","cctv","wifi"," it ","digital","fiber optic","bandwidth","perangkat lunak","perangkat keras","lisensi","kamera","vtron","komunikasi"] },
-    { tag: "Konstruksi", kw: ["pembangunan","konstruksi","jalan","jembatan","gedung","rehabilitasi","renovasi","drainase","irigasi","saluran","talud","trotoar","pondasi","bendungan","tanggul","gorong","dermaga","pengaspalan","rigid","box culvert","perkerasan","bronjong","aspal","peningkatan","pemeliharaan","paving","taman","pagar","plengsengan","normalisasi","siring","rehab","bangunan","fasilitas","infrastruktur"] },
-    { tag: "Kesehatan & Medis", kw: ["kesehatan","medis","obat","alat kesehatan","rumah sakit","puskesmas","klinik","vaksin","laboratorium","radiologi","ambulans","farmasi","apotek","imunisasi","alkes","bmhp","reagen","kedokteran","stunting","gizi"] },
-    { tag: "Pangan & Pertanian", kw: ["pertanian","pangan","beras","pupuk","benih","bibit","nelayan","perikanan","ternak","perkebunan","makanan","catering","konsumsi","makan siang","sapi","kambing","unggas","traktor","nelayan","kapal penangkap","pakan","hewan","sayur"] },
-    { tag: "Konsultansi & Perencanaan", kw: ["jasa konsultansi","konsultan","perencana","pengawasan","supervisi","manajemen proyek","studi kelayakan","amdal","masterplan","ded ","desain","kajian","penyusunan","dokumen","naskah akademik","detail engineering"] },
-    { tag: "Pendidikan & Pelatihan", kw: ["pendidikan","sekolah","pelatihan","buku","alat tulis","meja belajar","kursi sekolah","perpustakaan","bimtek","diklat","bimbingan teknis","alat peraga","laboratorium bahasa","siswa","guru","pengajar","modul"] },
-    { tag: "Transportasi & Otomotif", kw: ["kendaraan dinas","mobil","motor","bus","pickup","pemadam kebakaran","derek","angkutan","speedboat","perahu","kapal","truk","roda empat","roda dua","ban","suku cadang","kendaraan"] },
-    { tag: "Logistik & Ekspedisi", kw: ["logistik","pengiriman","distribusi","cargo","jasa angkut","bongkar muat","kurir"] },
-    { tag: "Fasilitas & Jasa Umum", kw: ["kebersihan","keamanan","cleaning service","security","satuan pengamanan","event organizer","pameran","jasa sewa","cetak","penggandaan","baliho","spanduk","seragam","pakaian","furniture","mebel","atk","sewa","pengadaan jasa","makan minum","alat tulis kantor","peralatan","perlengkapan"] }
+    { tag: "Teknologi", kw: ["sound system","audio","speaker","microphone","drone","uav","pesawat tanpa awak","sistem informasi","aplikasi","software","hardware","server","jaringan","komputer","laptop"," pc ","notebook","internet","website"," web ","cloud","cctv","wifi"," it ","digital","fiber optic","bandwidth","perangkat lunak","perangkat keras","lisensi","kamera","vtron","videotron","komunikasi","switch","router","akses poin","firewall","data center","gps","tracker","audio visual","teleconference","proyektor","ups","smartboard","sistem elektronik","hosting","elektronik","mesin fotokopi","fotokopi","cetak","pencetakan","media","publikasi","spectrometry","alat ukur","mesin"] },
+    { tag: "Konstruksi", kw: ["pembangunan","konstruksi","jalan","jembatan","gedung","rehabilitasi","renovasi","drainase","irigasi","saluran","talud","trotoar","pondasi","bendungan","tanggul","gorong","dermaga","pengaspalan","rigid","box culvert","perkerasan","bronjong","aspal","peningkatan","pemeliharaan","paving","taman","pagar","plengsengan","normalisasi","siring","rehab","bangunan","fasilitas","infrastruktur","jaring","air bersih","spam","sanitasi","rth","ruang terbuka hijau","sumur","asrama","halte","perbaikan","penataan","semen","hotmix","penahan tanah"] },
+    { tag: "Kesehatan", kw: ["kesehatan","medis","obat","alat kesehatan","rumah sakit","rsud","puskesmas","klinik","vaksin","laboratorium","radiologi","ambulans","farmasi","apotek","imunisasi","alkes","bmhp","reagen","kedokteran","stunting","gizi","usg","rontgen","oksigen","posyandu","dokter","pmt ","pemberian makanan tambahan","bblr","dinkes","masker","apd","antigen"] },
+    { tag: "Konsultansi", kw: ["jasa konsultansi","konsultan","perencana","pengawasan","supervisi","manajemen proyek","studi kelayakan","amdal","ukl","upl","masterplan","master plan"," ded ","desain","kajian","penyusunan","dokumen","naskah akademik","detail engineering"," fs ","perancangan","tata ruang","rdtr","rtrw","penilaian","appraisal","audit","inventarisasi"] },
+    { tag: "Pendidikan", kw: ["pendidikan","sekolah"," sdn "," smpn "," sman "," tk ","paud","pelatihan","buku","alat tulis","meja belajar","kursi sekolah","perpustakaan","bimtek","diklat","bimbingan teknis","alat peraga","laboratorium bahasa","siswa","guru","pengajar","modul","beasiswa","ijazah","rapor","drumband","alat musik","seragam sekolah"] },
+    { tag: "Otomotif", kw: ["kendaraan dinas","mobil","motor","sepeda motor","bus","minibus","pickup","pick up","pemadam kebakaran","damkar","derek","angkutan","speedboat","perahu","kapal","truk","dump truck","roda empat","roda dua","roda tiga","ban ","suku cadang","kendaraan","pelumas","karoseri","sparepart"] },
+    { tag: "Jasa Umum", kw: ["kebersihan","keamanan","cleaning service","security","satuan pengamanan","event organizer"," eo ","pameran","jasa sewa","penggandaan","baliho","spanduk","umbul-umbul","banner","seragam","pakaian dinas"," pdh "," pdl ","furniture","mebel","atk","alat tulis kantor","makan minum","asuransi","tiket","akomodasi","hotel","rapat","meeting","tenaga ahli","tenaga kerja","outsourcing","tenda","kursi lipat","terop",
+    // Eks Logistik
+    "logistik","pengiriman","distribusi","cargo","kargo","jasa angkut","bongkar muat","kurir","pos ","transportasi barang",
+    // Eks Pangan
+    "pertanian","pangan","beras","pupuk","benih","bibit","nelayan","perikanan","ternak","perkebunan","makanan","catering","konsumsi","makan siang","sapi","kambing","unggas","ayam","traktor","jaring ikan","kapal penangkap","pakan","hewan","sayur","buah","bibit pohon","sembako","bantuan sosial pangan","perah","cultivator","hand traktor","perahu nelayan"] }
   ];
   for (const b of map) {
     for (const kw of b.kw) {
       if (n.includes(kw)) {
-        return { tag: b.tag, kategori: "Jasa" };
+        return { tag: b.tag }; 
       }
     }
   }
-  return { tag: "Lainnya", kategori: "Lainnya" };
+  return { tag: "Lainnya" };
+}
+
+async function classifyWithAIBatch(packages) {
+  if (!packages || packages.length === 0) return {};
+  
+  const apiKey = process.env.OPENROUTER_SCRAPER_API_KEY || process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return packages.reduce((acc, p) => ({...acc, [p]: "Lainnya"}), {});
+
+  const prompt = `Tugas Anda mengklasifikasikan judul tender ke dalam HANYA salah satu kategori berikut: Teknologi, Konstruksi, Kesehatan, Pangan, Konsultansi, Pendidikan, Otomotif, Logistik, Jasa Umum. Jika sama sekali tidak masuk, kembalikan "Lainnya".
+
+Daftar judul:
+${JSON.stringify(packages)}
+
+KEMBALIKAN HANYA SEBUAH OBJEK JSON (tanpa backticks, tanpa format markdown, tanpa penjelasan apa pun) dengan judul sebagai key dan kategori sebagai value. Contoh: {"Pengadaan laptop ASUS": "Teknologi"}`;
+
+  try {
+    // Retry fetch if rate limited (max 3 times)
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "meta-llama/llama-3.3-70b-instruct:free", // WAJIB pakai model gratis agar tidak kena cek saldo
+          messages: [{ role: "user", content: prompt }]
+        })
+      });
+
+      if (response.status === 429) {
+        console.log(`[AI] Rate limit terkena. Menunggu ${attempt * 2} detik...`);
+        await new Promise(r => setTimeout(r, attempt * 2000));
+        continue;
+      }
+
+      const data = await response.json();
+      if (!data || !data.choices || !data.choices[0]) {
+        console.error(`[AI] OpenRouter Error (Attempt ${attempt}):`, JSON.stringify(data));
+        throw new Error(`OpenRouter Error: ${data?.error?.message || "Format tidak valid"}`);
+      }
+      
+      let text = data.choices[0].message.content.trim();
+      text = text.replace(/^```json/i, "").replace(/^```/i, "").replace(/```$/i, "").trim();
+      return JSON.parse(text);
+    }
+    throw new Error("Rate limit exceeded after retries");
+  } catch (err) {
+    console.log("[AI] Gagal klasifikasi:", err.message);
+    return packages.reduce((acc, p) => ({...acc, [p]: "Lainnya"}), {});
+  }
 }
 
 // Simpan batch ke MongoDB
@@ -244,6 +297,7 @@ async function scrapeSingleLpse(lpse, browser) {
       for (const row of rows) {
         const { tag, kategori } = classifyPaket(row.nama_paket);
         
+        const parsed = classifyPaket(row.nama_paket);
         const tahapStr = (row.tahap_saat_ini || "").toLowerCase();
         const isFinished = tahapStr.includes("selesai") || tahapStr.includes("pemenang");
         
@@ -253,8 +307,8 @@ async function scrapeSingleLpse(lpse, browser) {
           instansi:         row.instansi || lpse.nama,
           hps:              row.hps,
           pagu:             row.hps,
-          kategori,
-          tag,
+          kategori:         "Jasa",
+          tag:              parsed.tag,
           metode_pengadaan: row.metode_detail || "Tender",
           tahap_saat_ini:   row.tahap_saat_ini,
           wilayah:          lpse.nama,
@@ -295,12 +349,34 @@ async function scrapeBatch(batch, progressObj) {
   const browser = await puppeteer.launch({
     headless: true,
     ignoreHTTPSErrors: true,
+    protocolTimeout: 120000,
     args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--ignore-certificate-errors", "--disable-web-security"],
   });
   try {
     for (const lpse of batch) {
       const startTime = Date.now();
       const items = await scrapeSingleLpse(lpse, browser);
+
+      // AI Fallback Logic
+      const lainnyaItems = items.filter(i => i.tag === "Lainnya");
+      const apiKey = process.env.OPENROUTER_SCRAPER_API_KEY || process.env.OPENROUTER_API_KEY;
+      if (lainnyaItems.length > 0 && apiKey) {
+        console.log(`[AI] ${lpse.nama}: Memanggil OpenRouter untuk ${lainnyaItems.length} item 'Lainnya'...`);
+        const packageNames = lainnyaItems.map(i => i.nama_paket);
+        
+        const CHUNK_SIZE = 50;
+        for (let i = 0; i < packageNames.length; i += CHUNK_SIZE) {
+          const chunk = packageNames.slice(i, i + CHUNK_SIZE);
+          const aiResults = await classifyWithAIBatch(chunk);
+          
+          for (const item of lainnyaItems) {
+            if (aiResults[item.nama_paket] && aiResults[item.nama_paket] !== "Lainnya") {
+              item.tag = aiResults[item.nama_paket];
+            }
+          }
+        }
+      }
+
       progressObj.done++;
       const timeSec = ((Date.now() - startTime) / 1000).toFixed(1);
       const lpName = lpse.nama.padEnd(40, " ");
@@ -347,16 +423,30 @@ agenda.define("sync jadwal aktif", async () => {
   console.log(`\n📅  Sync jadwal tender aktif...`);
   const tenders = await TenderModel.find({ url_lpse: { $exists: true, $ne: "" }, lelangId: { $not: /^PKG-/ }, status: "aktif" }).select("lelangId url_lpse").lean();
   let synced = 0;
-  const browser = await puppeteer.launch({ headless: true, ignoreHTTPSErrors: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
-  for (const tender of tenders) {
+  
+  let browser;
+  const launchBrowser = async () => {
+    if (browser) await browser.close().catch(() => {});
+    return await puppeteer.launch({ headless: true, protocolTimeout: 120000, ignoreHTTPSErrors: true, args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"] });
+  };
+  
+  browser = await launchBrowser();
+
+  for (let i = 0; i < tenders.length; i++) {
+    const tender = tenders[i];
+    // Restart browser secara berkala untuk mencegah OOM / Crash
+    if (i > 0 && i % 100 === 0) {
+      browser = await launchBrowser();
+    }
+
     try {
       const { url_lpse, lelangId } = tender;
       const slug = new URL(url_lpse).pathname.replace(/^\//, "").split("/")[0] || url_lpse.split("/")[3];
       const jadwalUrl = `${BASE_DOMAIN}/${slug}/lelang/${lelangId}/jadwal`;
       const page = await browser.newPage();
       await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-      await page.goto(jadwalUrl, { waitUntil: "networkidle2", timeout: 45000 });
-      await new Promise(r => setTimeout(r, 2000)); // Tambahan delay kecil agar page render
+      await page.goto(jadwalUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+      await new Promise(r => setTimeout(r, 1000));
 
       const jadwalRows = await page.evaluate(() => {
         const trs = Array.from(document.querySelectorAll("table.table tbody tr, table tbody tr"));
@@ -373,10 +463,15 @@ agenda.define("sync jadwal aktif", async () => {
       }
     } catch (err) {
       console.error(`[-] Gagal sync jadwal ${tender.lelangId}:`, err.message);
+      // Jika error adalah browser disconnect, kita harus restart browsernya
+      if (err.message.includes("Connection closed") || err.message.includes("Target closed") || err.message.includes("Session closed")) {
+        console.log(`[!] Browser crashed, restarting...`);
+        browser = await launchBrowser();
+      }
     }
     if (synced % 10 === 0) await new Promise(r => setTimeout(r, 500));
   }
-  await browser.close();
+  if (browser) await browser.close().catch(() => {});
   console.log(`✅  Jadwal sync: ${synced}/${tenders.length} diperbarui\n`);
 });
 

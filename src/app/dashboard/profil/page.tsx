@@ -10,8 +10,7 @@ const DAFTAR_BIDANG = [
   "Otomotif",
   "Konstruksi",
   "Kesehatan",
-  "Logistik",
-  "Pangan",
+  "Jasa Umum", // Ditambahkan sebagai ganti agar tetap ada pilihan logis
 ];
 
 function normalizeBidang(input: unknown): string[] {

@@ -137,7 +137,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const fetchNotifications = async () => {
     if (!user) return;
     try {
-      const since = lastCheckedRef.current || new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const since = lastCheckedRef.current || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const res = await fetch(`/api/notifications?userId=${user.id}&since=${encodeURIComponent(since)}`);
       if (!res.ok) return;
 
@@ -147,21 +147,25 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         ...(data.pinnedUpdates || []),
       ];
 
-      // Filter item yang sudah pernah kita tampilkan (pakai id)
-      const seenStr = localStorage.getItem(`notif_seen_${user.id}`);
-      const seen: string[] = seenStr ? JSON.parse(seenStr) : [];
-      const fresh = newItems.filter(item => !seen.includes(item.id + item.type));
+      if (newItems.length > 0) {
+        setNotificationsHistory(prev => {
+          const combined = [...newItems, ...prev];
+          const unique = combined.filter((v, i, a) => a.findIndex(t => (t.id === v.id && t.type === v.type)) === i);
+          return unique.sort((a, b) => new Date(b.createdAt || b.updatedAt || 0).getTime() - new Date(a.createdAt || a.updatedAt || 0).getTime()).slice(0, 100);
+        });
 
-      if (fresh.length > 0) {
-        // Tambahkan ke history dan queue popup
-        setNotificationsHistory(prev => [...fresh, ...prev].slice(0, 50));
-        setUnreadNotifCount(prev => prev + fresh.length);
-        setNotifQueue(prev => [...prev, ...fresh]);
-        notifQueueRef.current = [...notifQueueRef.current, ...fresh];
+        const seenStr = localStorage.getItem(`notif_seen_${user.id}`);
+        const seen: string[] = seenStr ? JSON.parse(seenStr) : [];
+        const fresh = newItems.filter(item => !seen.includes(item.id + item.type));
 
-        // Tandai sebagai sudah pernah dilihat agar tidak muncul lagi
-        const newSeen = [...seen, ...fresh.map(f => f.id + f.type)].slice(-200);
-        localStorage.setItem(`notif_seen_${user.id}`, JSON.stringify(newSeen));
+        if (fresh.length > 0) {
+          setUnreadNotifCount(prev => prev + fresh.length);
+          setNotifQueue(prev => [...prev, ...fresh]);
+          notifQueueRef.current = [...notifQueueRef.current, ...fresh];
+
+          const newSeen = [...seen, ...fresh.map(f => f.id + f.type)].slice(-500);
+          localStorage.setItem(`notif_seen_${user.id}`, JSON.stringify(newSeen));
+        }
       }
 
       lastCheckedRef.current = new Date().toISOString();
@@ -268,104 +272,89 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       <AnimatePresence mode="wait">
         {notification && (
           <motion.div
-            key={notification.id + notification.type}
-            initial={{ opacity: 0, y: 60, scale: 0.92 }}
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.88, y: 30 }}
-            transition={{ type: "spring", stiffness: 420, damping: 28 }}
-            className="fixed bottom-6 right-6 z-[9999] max-w-[340px] w-full overflow-hidden"
+            exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.15 } }}
+            className="fixed bottom-6 right-6 z-[9999] max-w-[340px] w-full cursor-pointer rounded-2xl overflow-hidden shadow-xl"
+            onClick={() => {
+              if (notification.lelangId || notification.url_lpse) {
+                setSelectedItem({
+                  id: notification.lelangId || notification.id,
+                  link: notification.url_lpse || `https://lpse.lkpp.go.id/eproc4/lelang/${notification.lelangId}/pengumumanlelang`,
+                  lelangId: notification.lelangId,
+                  url_lpse: notification.url_lpse || `https://lpse.lkpp.go.id/eproc4/lelang/${notification.lelangId}/pengumumanlelang`,
+                  nama_produk: notification.title,
+                  instansi: notification.instansi || "",
+                  wilayah: notification.wilayah || "",
+                  pagu: notification.pagu || "",
+                  tipe: "Jasa",
+                  tahap_saat_ini: notification.tahap || "",
+                } as any);
+                setNotification(null); // dismiss popup
+              }
+            }}
             style={{
-              borderRadius: "20px",
-              background: notification.type === "new_tender"
-                ? "linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(240,253,244,0.98) 100%)"
-                : "linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(239,246,255,0.98) 100%)",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.18), 0 4px 16px rgba(0,0,0,0.08)",
-              backdropFilter: "blur(20px)",
-              border: notification.type === "new_tender"
-                ? "1px solid rgba(134,239,172,0.4)"
-                : "1px solid rgba(147,197,253,0.4)",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-primary)",
+              boxShadow: "0 10px 40px -10px rgba(0,0,0,0.15)"
             }}
           >
-            {/* Coloured top strip - WhatsApp style */}
-            <div
-              className="h-1 w-full"
-              style={{
-                background: notification.type === "new_tender"
-                  ? "linear-gradient(90deg, #22c55e, #16a34a)"
-                  : "linear-gradient(90deg, #3b82f6, #6366f1)",
-              }}
-            />
-            <div className="px-4 pt-3 pb-4 flex gap-3 items-start">
-              {/* Icon bubble */}
+            <div className="px-4 py-3.5 flex gap-4 items-start relative hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+              {/* Close Button placed absolutely in top right */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setNotification(null);
+                }}
+                className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-colors hover:bg-black/10 dark:hover:bg-white/10"
+              >
+                <X size={12} style={{ color: "var(--text-muted)" }} />
+              </button>
+
+              {/* Icon */}
               <div
-                className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center mt-0.5"
+                className="w-12 h-12 flex-shrink-0 rounded-full flex items-center justify-center text-white shadow-sm mt-0.5"
                 style={{
                   background: notification.type === "new_tender"
                     ? "linear-gradient(135deg, #22c55e, #16a34a)"
-                    : "linear-gradient(135deg, #3b82f6, #6366f1)",
-                  boxShadow: notification.type === "new_tender"
-                    ? "0 4px 12px rgba(34,197,94,0.35)"
-                    : "0 4px 12px rgba(59,130,246,0.35)",
+                    : "linear-gradient(135deg, #6366f1, #3b82f6)"
                 }}
               >
-                {notification.type === "new_tender"
-                  ? <Sparkles size={18} className="text-white" strokeWidth={2.5} />
-                  : <CalendarClock size={18} className="text-white" strokeWidth={2.5} />}
+                {notification.type === "new_tender" ? <Sparkles size={20} /> : <CalendarClock size={20} />}
               </div>
 
-              <div className="flex-1 min-w-0">
-                {/* Header Row */}
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <span
-                      className="text-[10px] font-extrabold uppercase tracking-widest"
-                      style={{ color: notification.type === "new_tender" ? "#16a34a" : "#3b82f6" }}
-                    >
-                      {notification.type === "new_tender" ? "✦ Tender Relevan Baru" : "⟳ Update Jadwal Tender"}
-                    </span>
-                    <h4 className="font-bold text-slate-900 text-sm leading-snug mt-0.5 line-clamp-2" style={{ letterSpacing: "-0.01em" }}>
-                      {notification.title}
-                    </h4>
-                  </div>
-                  <button
-                    onClick={() => setNotification(null)}
-                    className="flex-shrink-0 mt-0.5 w-6 h-6 rounded-full flex items-center justify-center transition-colors"
-                    style={{ background: "rgba(0,0,0,0.06)" }}
-                  >
-                    <X size={12} className="text-slate-500" />
-                  </button>
-                </div>
-
-                {/* Body */}
-                <div className="mt-1.5 space-y-0.5">
+              {/* Content */}
+              <div className="flex-1 min-w-0 pr-4">
+                <p className="text-[13px] leading-snug line-clamp-3" style={{ color: "var(--text-primary)" }}>
                   {notification.type === "new_tender" ? (
                     <>
-                      {notification.instansi && (
-                        <p className="text-xs text-slate-500 truncate">🏛 {notification.instansi}</p>
-                      )}
-                      {notification.wilayah && (
-                        <p className="text-xs text-slate-500 truncate">📍 {notification.wilayah}</p>
-                      )}
-                      {notification.score && (
-                        <p className="text-xs font-semibold" style={{ color: "#16a34a" }}>Kecocokan {notification.score}%</p>
-                      )}
+                      Tender baru relevan untuk Anda: <strong className="font-bold">{notification.title}</strong>
                     </>
                   ) : (
                     <>
-                      {notification.instansi && (
-                        <p className="text-xs text-slate-500 truncate">🏛 {notification.instansi}</p>
-                      )}
-                      {notification.tahap && (
-                        <p className="text-xs font-semibold" style={{ color: "#3b82f6" }}>Tahap: {notification.tahap}</p>
-                      )}
+                      Jadwal diperbarui untuk: <strong className="font-bold">{notification.title}</strong>
                     </>
                   )}
-                </div>
-
-                {/* Timestamp */}
-                <div className="mt-2 flex items-center gap-1.5">
-                  <Bell size={9} className="text-slate-400" />
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Selenoprojek Notifikasi</span>
+                </p>
+                <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                  <span
+                    className="text-[11px] font-bold"
+                    style={{ color: notification.type === "new_tender" ? "#16a34a" : "#6366f1" }}
+                  >
+                    Baru saja
+                  </span>
+                  {notification.instansi && (
+                    <>
+                      <span className="text-[10px] text-gray-400">•</span>
+                      <span className="text-[11px] truncate max-w-[120px]" style={{ color: "var(--text-muted)" }}>{notification.instansi}</span>
+                    </>
+                  )}
+                  {notification.score && (
+                    <>
+                      <span className="text-[10px] text-gray-400">•</span>
+                      <span className="text-[11px] font-semibold text-green-600">Cocok {notification.score}%</span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

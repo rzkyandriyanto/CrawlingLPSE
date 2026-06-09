@@ -169,19 +169,20 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Eksekusi hapus
-    const result = await TenderModel.deleteMany({
-      _id: { $in: toDelete },
-    });
+    // Eksekusi hapus (Soft delete)
+    const result = await TenderModel.updateMany(
+      { _id: { $in: toDelete } },
+      { $set: { is_deleted: true } }
+    );
 
     return NextResponse.json({
       success: true,
-      deleted: result.deletedCount,
+      deleted: result.modifiedCount,
       skipped_pinned: pinnedSkipped.length,
       pinned_details: pinnedSkipped,
       grace_days: graceDays,
       timestamp: new Date().toISOString(),
-      message: `${result.deletedCount} tender berhasil dihapus. ${pinnedSkipped.length} tender yang masih di-pin dilewati.`,
+      message: `${result.modifiedCount} tender berhasil dihapus (soft-delete). ${pinnedSkipped.length} tender yang masih di-pin dilewati.`,
     });
   } catch (error: any) {
     console.error("[cleanup] POST error:", error);

@@ -9,7 +9,8 @@ export async function GET(req: NextRequest) {
     // Ambil semua tender dengan status "selesai" atau "menang"
     // Urutkan dari yang terbaru di-update/dibuat
     const selesaiTenders = await TenderModel.find({ 
-      status: { $in: ["selesai", "menang"] } 
+      status: { $in: ["selesai", "menang"] },
+      is_deleted: { $ne: true }
     }).sort({ finished_at: -1, updatedAt: -1 });
 
     // Format menyesuaikan kebutuhan UI (SearchResultItem)

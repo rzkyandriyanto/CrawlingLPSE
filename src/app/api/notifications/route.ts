@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
     const since = searchParams.get("since"); // ISO timestamp
-    const sinceDate = since ? new Date(since) : new Date(Date.now() - 60 * 60 * 1000); // default: 1 jam lalu
+    const sinceDate = since ? new Date(since) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // default: 7 hari lalu
 
     if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
 

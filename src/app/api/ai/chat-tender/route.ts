@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
 Kamu sedang membantu pengguna yang bertanya tentang sebuah tender spesifik.
 Jawablah pertanyaan pengguna dengan jelas, singkat, profesional, dan to the point.
 Jika pertanyaannya mengenai kualifikasi, periksa bagian syarat kualifikasi jika tersedia di konteks.
+Jika pengguna menanyakan strategi analisis, peluang menang, atau strategi harga penawaran, berikan analisis yang komprehensif. Analisis tersebut harus mencakup tingkat persaingan, saran efisiensi harga penawaran (dibandingkan dengan HPS/Pagu), serta langkah-langkah taktis untuk memenangkan tender ini.
 Gunakan format paragraf atau list markdown yang rapi.
 
 **Konteks Tender:**

@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 
 async function run() {
   try {
-    await mongoose.connect('mongodb+srv://Admin_seleno:gusti123@cluster0.uyeqk8w.mongodb.net/seleno_db?appName=Cluster0');
+require('dotenv').config({ path: '.env.local' });
+    await mongoose.connect(process.env.MONGODB_URI);
     console.log("Connected to DB...");
     
     // In mongoose, the default collection name for model "Tender" is "tenders"

@@ -91,8 +91,26 @@ export default function ProductCard({
             )}
           </div>
           
-          <div className="flex-1 flex justify-center items-center overflow-hidden">
+          <div className="flex-1 flex justify-start items-center overflow-hidden gap-1.5">
             {customBadge}
+            {(() => {
+              const textToCheck = `${item.nama_produk} ${item.status} ${item.tahap_saat_ini}`.toLowerCase();
+              const isUlang = textToCheck.includes("seleksi ulang") || textToCheck.includes("tender ulang") || textToCheck.includes("diulang");
+              const isGagal = textToCheck.includes("tender gagal") || textToCheck.includes("gagal") || textToCheck.includes("batal");
+              
+              if (isUlang || isGagal) {
+                return (
+                  <span 
+                    className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md flex items-center gap-1 border ${isUlang ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-red-50 text-red-600 border-red-200'}`}
+                    title={isUlang ? "Tender ini merupakan seleksi/tender ulang" : "Tender ini gagal"}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${isUlang ? 'bg-orange-500' : 'bg-red-500'} animate-pulse`}></span>
+                    {isUlang ? "Diulang" : "Gagal"}
+                  </span>
+                );
+              }
+              return null;
+            })()}
           </div>
 
           <div className="flex items-center gap-1.5 flex-shrink-0">

@@ -97,11 +97,11 @@ export default function RegisterPage() {
           <form onSubmit={handleRegister} className="space-y-4">
             <div className="space-y-1.5">
               <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                Nama Perusahaan
+                Nama Lengkap
               </label>
               <input
                 type="text"
-                placeholder="Masukkan nama resmi"
+                placeholder="Masukkan nama lengkap"
                 required
                 className="w-full px-4 py-3 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-input)] focus:ring-2 focus:ring-black outline-none transition text-sm text-[var(--text-primary)] shadow-sm"
                 onChange={(e) =>
@@ -112,11 +112,11 @@ export default function RegisterPage() {
 
             <div className="space-y-1.5">
               <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                Email Perusahaan
+                Email
               </label>
               <input
                 type="email"
-                placeholder="nama@perusahaan.com"
+                placeholder="nama@email.com"
                 required
                 className="w-full px-4 py-3 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-input)] focus:ring-2 focus:ring-black outline-none transition text-sm text-[var(--text-primary)] shadow-sm"
                 onChange={(e) =>

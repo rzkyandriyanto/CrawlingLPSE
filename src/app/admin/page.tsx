@@ -2,10 +2,10 @@
 import { useEffect, useState } from "react";
 // supabase import removed
 import { motion, AnimatePresence } from "framer-motion";
-import { Users, Package, ShoppingBag, Activity, ArrowUpRight, TrendingUp, X, Mail, Key, Building } from "lucide-react";
+import { Users, Package, ShoppingBag, Activity, ArrowUpRight, TrendingUp, X, Mail, Key, Building, Briefcase } from "lucide-react";
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState({ users: 0, jasa: 0, produk: 0 });
+  const [stats, setStats] = useState({ users: 0, jasa: 0, produk: 0, lpseTotal: 0, barang: 0 });
   const [loading, setLoading] = useState(true);
   
   // State untuk Modal Tambah Admin
@@ -19,7 +19,13 @@ export default function AdminDashboard() {
         const res = await fetch("/api/admin/stats");
         if (res.ok) {
           const data = await res.json();
-          setStats({ users: data.users || 0, jasa: data.jasa || 0, produk: data.produk || 0 });
+          setStats({ 
+            users: data.users || 0, 
+            jasa: data.jasa || 0, 
+            produk: data.produk || 0,
+            lpseTotal: data.lpseTotal || 0,
+            barang: data.barang || 0
+          });
         }
       } catch (err) {
         console.error("Failed to fetch stats", err);
@@ -112,8 +118,8 @@ export default function AdminDashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         <StatCard title="Total Pengguna" value={stats.users} icon={<Users size={24} />} color="from-blue-600 to-indigo-600" subtext="Admin & User" />
-        <StatCard title="Total Jasa (LPSE)" value={stats.jasa} icon={<Package size={24} />} color="from-emerald-500 to-teal-600" subtext="Update Otomatis" />
-        <StatCard title="Total Produk" value={stats.produk} icon={<ShoppingBag size={24} />} color="from-orange-500 to-rose-600" subtext="Marketplace Source" />
+        <StatCard title="Total Jasa" value={stats.jasa} icon={<Briefcase size={24} />} color="from-emerald-500 to-teal-600" subtext="Dari Sumber LPSE" />
+        <StatCard title="Total Barang" value={(stats.produk || 0) + (stats.barang || 0)} icon={<ShoppingBag size={24} />} color="from-orange-500 to-rose-600" subtext="LPSE & Marketplace" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

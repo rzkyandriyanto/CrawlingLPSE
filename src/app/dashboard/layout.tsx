@@ -19,6 +19,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     handleLogout,
     selectedItem,
     setSelectedItem,
+    togglePin,
   } = useDashboard();
 
   const { isDarkMode, setIsDarkMode } = useTheme();
@@ -137,6 +138,8 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             language={language}
             isPinned={pinnedItems.some((p) => p.id === selectedItem.id)}
             userId={user?.id}
+            userName={user?.nama || user?.perusahaan || "Pengguna"}
+            onTogglePin={togglePin}
             onStatusUpdate={(tenderId, newStatus) => {
               // Update status di pinnedItems secara optimistik
               // DashboardContext akan di-refresh saat polling berikutnya

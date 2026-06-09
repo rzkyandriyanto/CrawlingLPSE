@@ -42,9 +42,10 @@ export type SearchResultItem = {
   jadwal?: any[];
   created_at?: string;
   // Status lifecycle tender
-  status?: "aktif" | "gagal" | "selesai" | "menang";
+  status?: "aktif" | "gagal" | "selesai" | "menang" | "batal";
   archived_at?: string | null;
   archived_by?: string | null;
+  pemenang_nama?: string;
   // Field dari halaman /pengumumanlelang
   kode_rup?: string;
   sumber_dana?: string;

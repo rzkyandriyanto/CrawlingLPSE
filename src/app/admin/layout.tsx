@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { LayoutDashboard, Users, Database, LogOut, ChevronRight, Menu, X } from "lucide-react";
+import { LayoutDashboard, Users, Database, LogOut, ChevronRight, Menu, X, LineChart, Home } from "lucide-react";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -31,6 +31,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "Dashboard", path: "/admin", icon: LayoutDashboard },
     { name: "Manajemen User", path: "/admin/users", icon: Users },
     { name: "Manajemen Data", path: "/admin/data", icon: Database },
+    { name: "Daftar Analisis", path: "/admin/analisis", icon: LineChart },
   ];
 
   if (!isAdmin) {
@@ -84,7 +85,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </nav>
         </div>
 
-        <div className="mt-auto p-8 border-t border-slate-100 bg-slate-50/50">
+        <div className="mt-auto p-8 border-t border-slate-100 bg-slate-50/50 flex flex-col gap-3">
+          <button 
+            onClick={() => router.push("/dashboard")}
+            className="flex items-center gap-3 w-full px-4 py-3 text-sm text-slate-600 font-bold hover:bg-slate-200 hover:text-black rounded-xl transition-all group"
+          >
+            <div className="p-2 bg-slate-200/50 rounded-lg group-hover:bg-slate-300 transition-colors text-slate-500 group-hover:text-black">
+              <Home size={16} />
+            </div>
+            <span>Kembali ke Utama</span>
+          </button>
           <button 
             onClick={() => { localStorage.removeItem("currentUser"); router.push("/login"); }}
             className="flex items-center gap-3 w-full px-4 py-3 text-sm text-red-500 font-bold hover:bg-red-50 rounded-xl transition-all group"

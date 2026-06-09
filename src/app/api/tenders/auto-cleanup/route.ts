@@ -48,10 +48,11 @@ export async function GET(req: NextRequest) {
 
     let deletedCount = 0;
     if (toDelete.length > 0) {
-      const result = await TenderModel.deleteMany({
-        _id: { $in: toDelete },
-      });
-      deletedCount = result.deletedCount;
+      const result = await TenderModel.updateMany(
+        { _id: { $in: toDelete } },
+        { $set: { is_deleted: true } }
+      );
+      deletedCount = result.modifiedCount;
     }
 
     return NextResponse.json({

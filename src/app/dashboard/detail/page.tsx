@@ -262,9 +262,9 @@ export default function DetailPage() {
                 <div className="w-full sm:w-3/4 text-sm">
                   {selectedItem.url_lpse && selectedItem.lelangId ? (
                     <a
-                      href={`${selectedItem.url_lpse}/${selectedItem.lelangId}/pengumumanlelang`}
+                      href={`${selectedItem.url_lpse.endsWith('/') ? selectedItem.url_lpse.slice(0, -1) : selectedItem.url_lpse}/lelang/${selectedItem.lelangId}/pengumumanlelang`}
                       target="_blank"
-                      rel="noopener noreferrer"
+                      rel="noopener"
                       className="font-black text-purple-600 flex items-center gap-1 hover:underline"
                     >
                       <ExternalLink size={14} /> Lihat di LPSE
@@ -280,9 +280,9 @@ export default function DetailPage() {
                 <div className="w-full sm:w-3/4 text-sm">
                   {selectedItem.url_lpse && selectedItem.lelangId ? (
                     <a
-                      href={`${selectedItem.url_lpse}/${selectedItem.lelangId}/pengumumanlelang`}
+                      href={`${selectedItem.url_lpse.endsWith('/') ? selectedItem.url_lpse.slice(0, -1) : selectedItem.url_lpse}/lelang/${selectedItem.lelangId}/pengumumanlelang`}
                       target="_blank"
-                      rel="noopener noreferrer"
+                      rel="noopener"
                       className="font-black text-purple-600 flex items-center gap-1 hover:underline"
                     >
                       <ExternalLink size={14} /> Buka Pengumuman Lelang di LPSE
@@ -291,7 +291,7 @@ export default function DetailPage() {
                     <a
                       href={selectedItem.url_lpse}
                       target="_blank"
-                      rel="noopener noreferrer"
+                      rel="noopener"
                       className="font-black text-purple-600 flex items-center gap-1 hover:underline"
                     >
                       <ExternalLink size={14} /> Buka Portal LPSE
