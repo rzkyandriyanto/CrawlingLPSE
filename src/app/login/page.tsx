@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ImageCarousel } from "@/components/common/ImageCarousel";
+import { toast } from "react-hot-toast";
 
 const AUTH_IMAGES = [
   "https://images.unsplash.com/photo-1555899434-94d1368aa7af?q=80&w=1080&auto=format&fit=crop", // Urban skyline
@@ -32,11 +33,12 @@ export default function LoginPage() {
       const { user, error } = await res.json();
 
       if (!res.ok || error || !user) {
-        alert(error || "Email atau Password salah!");
+        toast.error(error || "Email atau Password salah!");
         setLoading(false);
         return;
       }
 
+      toast.success("Login berhasil!");
       localStorage.setItem("currentUser", JSON.stringify(user));
       
       const tags = Array.isArray(user.tag)
@@ -52,7 +54,9 @@ export default function LoginPage() {
       
       router.push("/dashboard");
     } catch (err: any) {
-      alert("Terjadi kesalahan: " + err.message);
+      console.error("Login err:", err);
+      toast.error("Terjadi kesalahan: " + err.message);
+    } finally {
       setLoading(false);
     }
   };

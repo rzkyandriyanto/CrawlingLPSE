@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PROVINSI_INDONESIA, KOTA_INDONESIA, KOTA_PROVINSI_MAP, LocationDropdown } from "@/components/common/LocationDropdown";
 import { ImageCarousel } from "@/components/common/ImageCarousel";
+import { toast } from "react-hot-toast";
 
 const AUTH_IMAGES = [
   "https://images.unsplash.com/photo-1555899434-94d1368aa7af?q=80&w=1080&auto=format&fit=crop", // Urban skyline
@@ -29,7 +30,7 @@ export default function RegisterPage() {
     setLoading(true);
 
     if (formData.password.length < 6) {
-      alert("Password minimal 6 karakter!");
+      toast.error("Password minimal 6 karakter!");
       setLoading(false);
       return;
     }
@@ -44,15 +45,16 @@ export default function RegisterPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        alert("Gagal registrasi: " + (data.error || "Kesalahan server"));
+        toast.error("Gagal registrasi: " + (data.error || "Kesalahan server"));
         setLoading(false);
         return;
       }
 
+      toast.success("Registrasi berhasil!");
       localStorage.setItem("currentUser", JSON.stringify(data.user));
       router.push("/pilih-bidang");
     } catch (err: any) {
-      alert("Gagal registrasi: " + err.message);
+      toast.error("Gagal registrasi: " + err.message);
       setLoading(false);
     }
   };

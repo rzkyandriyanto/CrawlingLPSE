@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 // supabase import removed
 import { useRouter } from "next/navigation";
+import { toast } from "react-hot-toast";
 
 type StoredUser = {
   id: string | number;
@@ -34,7 +35,10 @@ export default function PilihBidangPage() {
   };
 
   const handleSimpan = async () => {
-    if (selectedTags.length === 0) return alert("Pilih minimal satu bidang!");
+    if (selectedTags.length === 0) {
+      toast.error("Pilih minimal satu bidang!");
+      return;
+    }
     if (!user) return;
 
     try {
@@ -46,18 +50,18 @@ export default function PilihBidangPage() {
 
       if (!res.ok) {
         const errorData = await res.json();
-        alert("Gagal menyimpan: " + (errorData.error || "Kesalahan server"));
+        toast.error("Gagal menyimpan: " + (errorData.error || "Kesalahan server"));
         return;
       }
     } catch (error: any) {
-      alert("Gagal menyimpan: " + error.message);
+      toast.error("Gagal menyimpan: " + error.message);
       return;
     }
 
     const old = localStorage.getItem("currentUser");
     const oldUser = old ? JSON.parse(old) : {};
     localStorage.setItem("currentUser", JSON.stringify({ ...oldUser, tag: selectedTags }));
-    router.push("/menyiapkan-dashboard");
+    router.push("/lengkapi-profil");
   };
 
   return (

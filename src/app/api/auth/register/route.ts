@@ -22,6 +22,9 @@ export async function POST(req: NextRequest) {
     const baseUsername = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, "").toLowerCase() || "user";
     const username = `${baseUsername}_${Date.now()}`;
 
+    // Generate session token
+    const sessionToken = crypto.randomUUID();
+
     // Buat pengguna baru
     const newUser = new UserModel({
       username,
@@ -32,7 +35,8 @@ export async function POST(req: NextRequest) {
       alamat: alamat || (kota && provinsi ? `${kota}, ${provinsi}` : ""),
       kota: kota || "",
       provinsi: provinsi || "",
-      role: "user"
+      role: "user",
+      session_token: sessionToken
     });
 
     await newUser.save();
@@ -46,7 +50,8 @@ export async function POST(req: NextRequest) {
       role: newUser.role,
       avatar_url: newUser.avatar_url,
       kota: newUser.kota,
-      provinsi: newUser.provinsi
+      provinsi: newUser.provinsi,
+      session_token: sessionToken
     };
 
     return NextResponse.json({ user: userToReturn }, { status: 201 });

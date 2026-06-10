@@ -5,6 +5,7 @@ const ReviewSchema = new mongoose.Schema({
   itemType: { type: String, enum: ["Tender", "Barang", "Jasa"], required: true },
   userId: { type: String, default: null }, // Bisa null jika guest
   userName: { type: String, required: true },
+  userAvatar: { type: String, default: null },
   rating: { type: Number, min: 1, max: 5 }, // Optional for replies
   comment: { type: String, required: true },
   parentId: { type: String, default: null }, // To link a reply to a parent review

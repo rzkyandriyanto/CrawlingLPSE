@@ -43,10 +43,8 @@ function DashboardContent() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [earlyStageTenders, setEarlyStageTenders] = useState<any[]>([]);
   const [lpseStats, setLpseStats] = useState<{name: string, count: number}[]>([]);
-  const [expandedLeaderboard, setExpandedLeaderboard] = useState<string | null>(null);
   const [topKeywords, setTopKeywords] = useState<string[]>(TRENDING_KEYWORDS);
 
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
@@ -141,7 +139,7 @@ function DashboardContent() {
         });
         const payload = (await res.json()) as {
           items?: Array<Omit<SearchResultItem, "id">>;
-          leaderboard?: any[];
+
           lpseStats?: {name: string, count: number}[];
           earlyStageTenders?: any[];
           topKeywords?: string[];
@@ -164,7 +162,7 @@ function DashboardContent() {
 
         setResults((prev) => (isLoadMore ? [...prev, ...mapped] : mapped));
         if (!isLoadMore) {
-          if (payload.leaderboard) setLeaderboard(payload.leaderboard);
+
           if (payload.lpseStats) setLpseStats(payload.lpseStats);
           if (payload.earlyStageTenders) setEarlyStageTenders(payload.earlyStageTenders);
           if (payload.topKeywords && payload.topKeywords.length > 0) setTopKeywords(payload.topKeywords);
@@ -573,56 +571,7 @@ function DashboardContent() {
       ) : (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
 
-          {/* Pinned Items Preview (in Dashboard view) */}
-          {pinnedItems.length > 0 && (
-            <div className="mt-6 sm:mt-8 mb-8 sm:mb-10">
-              <div className="flex items-center justify-between mb-4 sm:mb-5">
-                <div className="flex items-center gap-2.5">
-                  <div
-                    className="p-2 rounded-lg border"
-                    style={{ backgroundColor: "var(--amber-subtle)", borderColor: "var(--amber-border)" }}
-                  >
-                    <Pin size={16} style={{ color: "var(--amber-text)" }} />
-                  </div>
-                  <h2 className="text-base sm:text-lg font-bold" style={{ color: "var(--text-primary)" }}>
-                    {language === 'EN' ? 'Saved' : 'Tersimpan'} ({pinnedItems.length})
-                  </h2>
-                </div>
-                <button
-                  onClick={() => router.push("/dashboard/tersimpan")}
-                  className="text-xs sm:text-sm font-bold text-slate-400 hover:text-black transition-colors"
-                >
-                  {language === 'EN' ? 'See All →' : 'Lihat Semua →'}
-                </button>
-              </div>
-              <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-3 snap-x snap-mandatory scrollbar-thin">
-                {pinnedItems.slice(0, 6).map((p) => (
-                  <motion.div
-                    key={`pinned-preview-${p.id}`}
-                    layout
-                    className="flex-shrink-0 w-[220px] sm:w-[260px] p-4 rounded-xl border-2 shadow-sm hover:shadow-md transition-all group snap-start"
-                    style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--amber-border)" }}
-                  >
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <h4 className="text-sm font-black leading-tight line-clamp-2 flex-1">
-                        {p.nama_produk}
-                      </h4>
-                      <button
-                        onClick={() => removePin(p)}
-                        className="p-1 text-amber-400 hover:text-red-500 transition-colors flex-shrink-0"
-                        title={language === 'EN' ? "Remove" : "Hapus"}
-                      >
-                        <X size={14} strokeWidth={3} />
-                      </button>
-                    </div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">
-                      {p.kategori} · {p.metode_pengadaan || "Tender"}
-                    </p>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
-          )}
+
 
           {/* ── Notification Preview Section ── */}
           {notificationsHistory.length > 0 && (
@@ -674,7 +623,7 @@ function DashboardContent() {
                   >
                     {/* Icon */}
                     <div
-                      className="w-8 h-8 flex-shrink-0 rounded-lg flex items-center justify-center"
+                      className={`w-8 h-8 flex-shrink-0 flex items-center justify-center ${notif.type === "new_tender" ? "rounded-lg" : "rounded-full"}`}
                       style={{
                         background: notif.type === "new_tender"
                           ? "linear-gradient(135deg, #22c55e, #16a34a)"
@@ -708,73 +657,6 @@ function DashboardContent() {
             </div>
           )}
 
-          {/* ── Leaderboard Pemenang ── */}
-          {leaderboard.length > 0 && !isPreparing && (
-            <div className="mt-6 mb-4 w-full sm:max-w-sm">
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between p-3 bg-slate-50 border-b border-slate-100">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1 rounded border bg-amber-50 border-amber-200">
-                      <Trophy size={12} className="text-amber-500" />
-                    </div>
-                    <h2 className="text-xs font-black text-slate-800 tracking-tight">
-                      {language === 'EN' ? 'Top Winners' : 'Top Pemenang'} {filterTipe !== 'Semua' && filterTipe !== '' ? filterTipe : ''}
-                    </h2>
-                  </div>
-                </div>
-                <div className="flex flex-col divide-y divide-slate-100 min-h-[100px]">
-                  {leaderboard.map((winner: any, idx: number) => {
-                      const isExpanded = expandedLeaderboard === winner.name;
-                      return (
-                        <div key={idx} className="flex flex-col">
-                          <button 
-                            onClick={() => setExpandedLeaderboard(isExpanded ? null : winner.name)}
-                            className="w-full flex items-center justify-between p-2.5 text-left hover:bg-slate-50 transition-colors"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                              <span className={`text-[10px] font-black w-4 text-center shrink-0 ${idx === 0 ? 'text-amber-500' : idx === 1 ? 'text-slate-500' : idx === 2 ? 'text-orange-400' : 'text-slate-300'}`}>
-                                #{idx + 1}
-                              </span>
-                              <div className="min-w-0">
-                                <p className="font-bold text-slate-700 text-[11px] truncate">{winner.name}</p>
-                                <p className="text-[9px] font-bold text-slate-400 mt-0.5">{winner.count} Menang</p>
-                              </div>
-                            </div>
-                            <div className="shrink-0 text-slate-300">
-                              {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                            </div>
-                          </button>
-                          
-                          <AnimatePresence>
-                            {isExpanded && (
-                              <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: "auto", opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                className="overflow-hidden bg-slate-50/50"
-                              >
-                                <div className="px-2.5 pb-2.5 pt-1 flex flex-col gap-1.5 border-t border-slate-100">
-                                  {winner.tenders?.map((t: any, i: number) => (
-                                    <div key={i} className="flex flex-col gap-0.5 p-2 bg-white rounded border border-slate-100 shadow-sm">
-                                      <p className="font-bold text-slate-600 text-[9px] line-clamp-1">{t.nama_paket}</p>
-                                      <div className="flex justify-between items-center mt-0.5">
-                                        <span className="text-[8px] font-bold text-green-600">{t.status || 'Selesai'}</span>
-                                        <span className="text-[9px] font-black text-slate-800">{t.pagu}</span>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      );
-                    })
-                  }
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* ── Tender Tahap Awal (Highlight Box) ── */}
           {earlyStageTenders.length > 0 && !isPreparing && (

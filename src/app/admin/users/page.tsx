@@ -5,6 +5,7 @@ import { Trash2, Mail, Building2, Shield, Search, MoreVertical } from "lucide-re
 import { motion, AnimatePresence } from "framer-motion";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
 import { PieChart } from "lucide-react";
+import { toast } from "react-hot-toast";
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -35,7 +36,7 @@ export default function UserManagement() {
       if (!res.ok) throw new Error(error);
       setUsers(users || []);
     } catch (err: any) {
-      alert("Gagal memuat pengguna: " + err.message);
+      toast.error("Gagal memuat pengguna: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -43,7 +44,7 @@ export default function UserManagement() {
 
   async function deleteUser(id: string, email: string) {
     if (email === "admin@seleno.id") {
-      alert("Tidak bisa menghapus Admin Utama!");
+      toast.error("Tidak bisa menghapus Admin Utama!");
       return;
     }
 
@@ -54,8 +55,9 @@ export default function UserManagement() {
       const { error } = await res.json();
       if (!res.ok) throw new Error(error);
       setUsers(users.filter((u) => u.id !== id));
+      toast.success(`User ${email} berhasil dihapus.`);
     } catch (err: any) {
-      alert("Gagal menghapus: " + err.message);
+      toast.error("Gagal menghapus: " + err.message);
     }
   }
 

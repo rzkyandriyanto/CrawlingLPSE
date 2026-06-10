@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 // supabase import removed
 import { Trash2, Package, ShoppingBag, Search, ExternalLink, Filter } from "lucide-react";
+import { toast } from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function DataManagement() {
@@ -23,7 +24,7 @@ export default function DataManagement() {
       if (!res.ok) throw new Error(error);
       setData(resData || []);
     } catch (err: any) {
-      alert("Gagal memuat data: " + err.message);
+      toast.error("Gagal memuat data: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -42,7 +43,7 @@ export default function DataManagement() {
       
       setData(data.filter(item => item.id !== id));
     } catch (err: any) {
-      alert("Gagal menghapus: " + err.message);
+      toast.error("Gagal menghapus: " + err.message);
     }
   }
 

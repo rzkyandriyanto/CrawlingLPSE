@@ -85,17 +85,18 @@ export async function GET(req: NextRequest) {
       topKeywords: Array.from(new Set([...(userDoc.search_history || [])].reverse())).slice(0, 10),
     };
 
-    // ── 1. TENDER BARU yang relevan ──────────────────────────────────────────
+    // ── 1. TENDER BARU / REKOMENDASI (Ladang History) ────────────────────────
+    // Mengambil dari 300 tender aktif terbaru tanpa peduli sinceDate,
+    // agar inbox Notifikasi selalu terisi dengan tender yang cocok.
     const newTenderDocs = await TenderModel.find(
-      { createdAt: { $gt: sinceDate }, status: "aktif" },
-      { nama_paket: 1, instansi: 1, wilayah: 1, kategori: 1, tag: 1, pagu: 1, lelangId: 1, url_lpse: 1, createdAt: 1 }
-    ).limit(50).lean();
+      { status: "aktif" }
+    ).sort({ createdAt: -1 }).limit(300).lean();
 
     const newTenders = newTenderDocs
       .map((t: any) => ({ ...t, score: calcRelevanceScore(t, userProfile) }))
-      .filter((t: any) => t.score >= 50) // Hanya yang relevan (skor >= 50)
+      .filter((t: any) => t.score >= 50) // Kembalikan ke skor 50 agar kualitas rekomendasi tetap tinggi
       .sort((a: any, b: any) => b.score - a.score)
-      .slice(0, 5)
+      .slice(0, 15) // Tampilkan hingga 15 rekomendasi terbaik
       .map((t: any) => ({
         id: t._id.toString(),
         type: "new_tender" as const,
@@ -107,6 +108,7 @@ export async function GET(req: NextRequest) {
         lelangId: t.lelangId,
         url_lpse: t.url_lpse,
         createdAt: t.createdAt,
+        originalTender: { ...t, id: t._id.toString() },
       }));
 
     // ── 2. UPDATE JADWAL pada tender yang sudah di-Pin ────────────────────────
@@ -115,8 +117,7 @@ export async function GET(req: NextRequest) {
       {
         _id: { $in: pinnedIds },
         updatedAt: { $gt: sinceDate },
-      },
-      { nama_paket: 1, instansi: 1, jadwal: 1, lelangId: 1, url_lpse: 1, updatedAt: 1 }
+      }
     ).lean();
 
     const pinnedUpdates = updatedPinnedDocs.map((t: any) => {
@@ -131,6 +132,7 @@ export async function GET(req: NextRequest) {
         lelangId: t.lelangId,
         url_lpse: t.url_lpse,
         updatedAt: t.updatedAt,
+        originalTender: { ...t, id: t._id.toString() },
       };
     });
 

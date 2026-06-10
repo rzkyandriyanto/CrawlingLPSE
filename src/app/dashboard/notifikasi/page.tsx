@@ -45,7 +45,9 @@ export default function NotifikasiPage() {
   };
 
   const handleNotifClick = (item: any) => {
-    if (item.lelangId || item.url_lpse) {
+    if (item.originalTender) {
+      setSelectedItem(item.originalTender as any);
+    } else if (item.lelangId || item.url_lpse) {
       setSelectedItem({
         id: item.lelangId || item.id,
         link: item.url_lpse || `https://lpse.lkpp.go.id/eproc4/lelang/${item.lelangId}/pengumumanlelang`,
@@ -152,7 +154,7 @@ export default function NotifikasiPage() {
                         <div className="px-4 py-3.5 flex gap-4 items-center hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
                           {/* Icon */}
                           <div
-                            className="w-12 h-12 flex-shrink-0 rounded-full flex items-center justify-center text-white shadow-sm"
+                            className={`w-12 h-12 flex-shrink-0 flex items-center justify-center text-white shadow-sm ${item.type === "new_tender" ? "rounded-xl" : "rounded-full"}`}
                             style={{
                               background: item.type === "new_tender"
                                 ? "linear-gradient(135deg, #22c55e, #16a34a)"
@@ -180,7 +182,10 @@ export default function NotifikasiPage() {
                                 className="text-[11px] font-bold"
                                 style={{ color: item.type === "new_tender" ? "#16a34a" : "#6366f1" }}
                               >
-                                {formatTime(item.createdAt || item.updatedAt)}
+                                {item.type === "new_tender" 
+                                  ? (language === "EN" ? `Published: ${formatTime(item.createdAt || item.updatedAt)}` : `Diumumkan: ${formatTime(item.createdAt || item.updatedAt)}`)
+                                  : (language === "EN" ? `Updated: ${formatTime(item.createdAt || item.updatedAt)}` : `Diperbarui: ${formatTime(item.createdAt || item.updatedAt)}`)
+                                }
                               </span>
                               {item.instansi && (
                                 <>

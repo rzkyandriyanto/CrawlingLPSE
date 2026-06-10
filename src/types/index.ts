@@ -9,6 +9,7 @@ export type StoredUser = {
   provinsi?: string;
   website?: string;
   foto_url?: string;
+  avatar_url?: string;
   search_history?: string[];
 };
 

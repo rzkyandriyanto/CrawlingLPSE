@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { itemId, itemType, userId, userName, rating, comment, parentId } = body;
+    const { itemId, itemType, userId, userName, userAvatar, rating, comment, parentId } = body;
     
     if (!itemId || !userName || !comment) {
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     await connectToDatabase();
     
     const newReview = await ReviewModel.create({
-      itemId, itemType, userId, userName, rating: rating || 5, comment, parentId: parentId || null
+      itemId, itemType, userId, userName, userAvatar: userAvatar || null, rating: rating || 5, comment, parentId: parentId || null
     });
     
     return NextResponse.json({ review: newReview }, { status: 201 });

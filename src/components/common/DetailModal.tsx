@@ -44,13 +44,15 @@ import {
   ThumbsUp,
   BrainCircuit,
   Bookmark,
-  BookmarkCheck
+  BookmarkCheck,
+  Bell
 } from "lucide-react";
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { SearchResultItem } from "@/types";
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, Cell, ReferenceLine } from "recharts";
+import { toast } from "react-hot-toast";
 
 type DetailModalProps = {
   item: SearchResultItem;
@@ -59,6 +61,7 @@ type DetailModalProps = {
   isPinned?: boolean;
   userId?: string | number | null;
   userName?: string | null;
+  userAvatar?: string | null;
   onTogglePin?: (item: SearchResultItem) => void;
   onStatusUpdate?: (tenderId: string, newStatus: string) => void;
 };
@@ -273,7 +276,7 @@ function AiBiddingAnalysis({ namaPaket, pagu, hps, pemenangNama, pemenangHarga, 
 }
 
 
-const ReviewSection = ({ itemId, itemType, userId, userName, language }: { itemId: string, itemType: string, userId: string | number | null | undefined, userName?: string | null, language: "ID" | "EN" }) => {
+const ReviewSection = ({ itemId, itemType, userId, userName, userAvatar, language }: { itemId: string, itemType: string, userId: string | number | null | undefined, userName?: string | null, userAvatar?: string | null, language: "ID" | "EN" }) => {
   const [reviews, setReviews] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [newReview, setNewReview] = useState({ rating: 5, comment: "", userName: userName || "" });
@@ -320,6 +323,7 @@ const ReviewSection = ({ itemId, itemType, userId, userName, language }: { itemI
           itemType,
           userId: userId || null,
           userName: targetUserName,
+          userAvatar: userAvatar || null,
           rating: parentId ? undefined : newReview.rating,
           comment: targetComment,
           parentId
@@ -385,7 +389,7 @@ const ReviewSection = ({ itemId, itemType, userId, userName, language }: { itemI
   const handleLike = async (id: string) => {
     const likeUserId = String(userId || userName || "");
     if (!likeUserId) {
-      alert(language === "EN" ? "Please log in or enter your name to like." : "Silakan login atau masukkan nama Anda untuk menyukai.");
+      toast.error(language === "EN" ? "Please log in or enter your name to like." : "Silakan login atau masukkan nama Anda untuk menyukai.");
       return;
     }
 
@@ -434,9 +438,13 @@ const ReviewSection = ({ itemId, itemType, userId, userName, language }: { itemI
       <div key={rev._id} className={`py-4 flex flex-col gap-2.5 ${!isReply ? "border-b border-slate-100" : "mt-2 pt-2 border-t border-slate-50"}`}>
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-2.5">
-            <div className={`${isReply ? "w-6 h-6 text-[10px]" : "w-7 h-7 text-xs"} rounded-full bg-slate-50 flex items-center justify-center text-slate-600 font-bold uppercase`}>
-              {isDeleted ? "-" : rev.userName.charAt(0)}
-            </div>
+            {(rev.userAvatar || (rev.userId === userId && userAvatar)) && !(rev.userAvatar || (rev.userId === userId && userAvatar))?.includes("default-avatar") && !isDeleted ? (
+              <img src={rev.userAvatar || userAvatar || ""} alt={rev.userName} className={`rounded-full object-cover border border-slate-200 ${isReply ? "w-6 h-6" : "w-8 h-8"}`} />
+            ) : (
+              <div className={`${isReply ? "w-6 h-6 text-[9px]" : "w-8 h-8 text-[11px]"} rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center font-bold text-slate-500`}>
+                {isDeleted ? "-" : rev.userName.charAt(0)}
+              </div>
+            )}
             <div>
               <p className={`font-bold ${isReply ? "text-[11px]" : "text-xs"} text-slate-800`}>
                 {isDeleted ? (language === "EN" ? "[Deleted User]" : "[Pengguna Dihapus]") : rev.userName}
@@ -592,9 +600,18 @@ const ReviewSection = ({ itemId, itemType, userId, userName, language }: { itemI
         <form onSubmit={(e) => handleSubmit(e, null)} className="flex flex-col gap-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             {userName ? (
-              <span className="text-xs text-slate-500 font-medium">
-                {language === "EN" ? "Posting as" : "Mengulas sebagai"} <span className="text-slate-800 font-bold">{userName}</span>
-              </span>
+              <div className="flex items-center gap-2">
+                {userAvatar && !userAvatar.includes("default-avatar") ? (
+                  <img src={userAvatar} alt={userName} className="w-6 h-6 rounded-full object-cover border border-slate-200" />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-500 text-[9px]">
+                    {userName.charAt(0)}
+                  </div>
+                )}
+                <span className="text-xs text-slate-500 font-medium">
+                  {language === "EN" ? "Posting as" : "Mengulas sebagai"} <span className="text-slate-800 font-bold">{userName}</span>
+                </span>
+              </div>
             ) : (
               <input
                 type="text"
@@ -667,7 +684,7 @@ const ReviewSection = ({ itemId, itemType, userId, userName, language }: { itemI
   );
 };
 
-export default function DetailModal({ item, onClose, language, isPinned = false, userId, userName, onTogglePin, onStatusUpdate }: DetailModalProps) {
+export default function DetailModal({ item, onClose, language, isPinned = false, userId, userName, userAvatar, onTogglePin, onStatusUpdate }: DetailModalProps) {
   const [activeTab, setActiveTab] = useState<"desc" | "vendor" | "ai" | "ulasan">("desc");
   // Tab khusus untuk tender LPSE (Jasa)
   const isSelesai = item.status && (item.status.toLowerCase().includes("selesai") || item.status.toLowerCase().includes("menang"));
@@ -938,18 +955,39 @@ export default function DetailModal({ item, onClose, language, isPinned = false,
         {/* ── HEADER ACTIONS (PIN & CLOSE) ── */}
         <div className="absolute top-3.5 right-3.5 sm:top-5 sm:right-5 flex items-center gap-2 z-20">
           {onTogglePin && (
-            <button
-              onClick={() => onTogglePin(item)}
-              className="p-2 rounded-full border hover:scale-105 active:scale-95 transition-all duration-200 hover:opacity-80 flex items-center justify-center"
-              style={
-                isPinned
-                  ? { backgroundColor: "var(--amber-subtle)", borderColor: "var(--amber-border)", color: "var(--amber-text)" }
-                  : { backgroundColor: "var(--bg-tertiary)", borderColor: "var(--border-primary)", color: "var(--text-secondary)" }
-              }
-              title={isPinned ? (language === "EN" ? "Saved" : "Tersimpan") : (language === "EN" ? "Save" : "Simpan")}
-            >
-              {isPinned ? <BookmarkCheck className="w-4 h-4 sm:w-5 sm:h-5" /> : <Bookmark className="w-4 h-4 sm:w-5 sm:h-5" />}
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Badge Status Pelacakan */}
+              <span 
+                className={`hidden sm:flex items-center gap-1.5 text-[10px] sm:text-xs font-bold px-3 py-1.5 rounded-full transition-colors duration-300 ${
+                  isPinned 
+                    ? "bg-emerald-100 text-emerald-700 border border-emerald-200" 
+                    : "bg-slate-100 text-slate-500 border border-slate-200"
+                }`}
+              >
+                {isPinned ? (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    {language === "EN" ? "Tracking Active" : "Pelacakan Aktif"}
+                  </>
+                ) : (
+                  language === "EN" ? "Save to track" : "Simpan & Lacak"
+                )}
+              </span>
+              
+              {/* Tombol Simpan/Lacak */}
+              <button
+                onClick={() => onTogglePin(item)}
+                className="p-2 sm:p-2.5 rounded-full border hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center shadow-sm"
+                style={
+                  isPinned
+                    ? { backgroundColor: "#10b981", borderColor: "#059669", color: "#ffffff", boxShadow: "0 0 10px rgba(16, 185, 129, 0.4)" }
+                    : { backgroundColor: "var(--bg-tertiary)", borderColor: "var(--border-primary)", color: "var(--text-secondary)" }
+                }
+                title={isPinned ? (language === "EN" ? "Tracking" : "Sedang Dilacak") : (language === "EN" ? "Track Schedule" : "Lacak Jadwal")}
+              >
+                {isPinned ? <BookmarkCheck className="w-4 h-4 sm:w-5 sm:h-5" /> : <Bookmark className="w-4 h-4 sm:w-5 sm:h-5" />}
+              </button>
+            </div>
           )}
           <button
             onClick={onClose}
@@ -1041,6 +1079,30 @@ export default function DetailModal({ item, onClose, language, isPinned = false,
               </div>
             </div>
           </div>
+
+          {/* ── INFO PELACAKAN JADWAL (Hanya Tampil Jika Disimpan & Adalah Tender LPSE) ── */}
+          {isPinned && isLpse && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }} 
+              animate={{ opacity: 1, height: "auto" }} 
+              className="flex items-start gap-3 p-3.5 sm:p-4 rounded-xl border overflow-hidden" 
+              style={{ backgroundColor: "rgba(99, 102, 241, 0.05)", borderColor: "rgba(99, 102, 241, 0.2)" }}
+            >
+              <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Bell className="w-4 h-4 text-indigo-600" />
+              </div>
+              <div>
+                <p className="text-sm font-bold mb-1 text-indigo-900">
+                  {language === "EN" ? "Schedule Tracking is Active" : "Pelacakan Jadwal Aktif"}
+                </p>
+                <p className="text-xs leading-relaxed text-indigo-800 opacity-90 max-w-3xl">
+                  {language === "EN" 
+                    ? "You have saved this tender. The system is actively monitoring it and will automatically send a notification when the schedule or stage is updated by the organizer." 
+                    : "Anda telah menyimpan tender ini. Sistem sedang aktif memantaunya dan akan otomatis mengirimkan notifikasi kepada Anda setiap kali ada pembaruan jadwal atau tahapan dari pihak penyelenggara."}
+                </p>
+              </div>
+            </motion.div>
+          )}
 
           {/* ========================================================
               MAIN CONTENT (2 Column Grid Layout)
@@ -1845,104 +1907,10 @@ export default function DetailModal({ item, onClose, language, isPinned = false,
                   </a>
                 )}
 
-                {/* ── Klasifikasi Status Tender (hanya muncul jika tender di-pin) ── */}
-                {isPinned && item.lelangId && (
-                  <div
-                    className="mt-1 p-4 rounded-xl border"
-                    style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border-primary)" }}
-                  >
-                    <h3 className="text-xs font-black uppercase tracking-wider mb-3" style={{ color: "var(--text-secondary)" }}>
-                      {language === "EN" ? "Update Tender Status" : "Perbarui Status Tender"}
-                    </h3>
 
-                    {/* Tampilan status saat ini */}
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
-                        {language === "EN" ? "Current:" : "Status Saat Ini:"}
-                      </span>
-                      <span
-                        className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide"
-                        style={{
-                          backgroundColor:
-                            currentStatus === "menang" ? "rgba(16,185,129,0.12)" :
-                            currentStatus === "gagal" ? "rgba(239,68,68,0.12)" :
-                            currentStatus === "selesai" ? "rgba(99,102,241,0.12)" :
-                            "rgba(107,114,128,0.10)",
-                          color:
-                            currentStatus === "menang" ? "rgb(5,150,105)" :
-                            currentStatus === "gagal" ? "rgb(220,38,38)" :
-                            currentStatus === "selesai" ? "rgb(99,102,241)" :
-                            "var(--text-secondary)",
-                        }}
-                      >
-                        {currentStatus === "aktif" ? (language === "EN" ? "Active" : "Aktif") :
-                         currentStatus === "menang" ? (language === "EN" ? "Won" : "Menang") :
-                         currentStatus === "gagal" ? (language === "EN" ? "Failed" : "Gagal") :
-                         (language === "EN" ? "Finished" : "Selesai")}
-                      </span>
-                    </div>
-
-                    {/* Tombol klasifikasi */}
-                    <div className="flex flex-col gap-2">
-                      {currentStatus !== "menang" && (
-                        <button
-                          onClick={() => handleUpdateStatus("menang")}
-                          disabled={statusLoading}
-                          className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl font-bold text-xs transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
-                          style={{ backgroundColor: "rgba(16,185,129,0.12)", color: "rgb(5,150,105)", border: "1px solid rgba(16,185,129,0.25)" }}
-                        >
-                          <Trophy size={14} />
-                          {statusLoading ? "..." : (language === "EN" ? "Mark as Won 🏆" : "Tandai Menang 🏆")}
-                        </button>
-                      )}
-                      {currentStatus !== "gagal" && (
-                        <button
-                          onClick={() => handleUpdateStatus("gagal")}
-                          disabled={statusLoading}
-                          className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl font-bold text-xs transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
-                          style={{ backgroundColor: "rgba(239,68,68,0.10)", color: "rgb(220,38,38)", border: "1px solid rgba(239,68,68,0.22)" }}
-                        >
-                          <XCircle size={14} />
-                          {statusLoading ? "..." : (language === "EN" ? "Mark as Failed ❌" : "Tandai Gagal ❌")}
-                        </button>
-                      )}
-                      {currentStatus !== "aktif" && (
-                        <button
-                          onClick={() => handleUpdateStatus("aktif")}
-                          disabled={statusLoading}
-                          className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl font-bold text-xs transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
-                          style={{ backgroundColor: "var(--bg-tertiary)", color: "var(--text-secondary)", border: "1px solid var(--border-primary)" }}
-                        >
-                          <RotateCcw size={12} />
-                          {statusLoading ? "..." : (language === "EN" ? "Reactivate" : "Aktifkan Kembali")}
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Feedback message */}
-                    {statusMessage && (
-                      <div
-                        className="mt-2.5 p-2.5 rounded-xl text-xs font-semibold"
-                        style={{
-                          backgroundColor: statusMessage.type === "success" ? "rgba(16,185,129,0.10)" : "rgba(239,68,68,0.10)",
-                          color: statusMessage.type === "success" ? "rgb(5,150,105)" : "rgb(220,38,38)",
-                          border: `1px solid ${statusMessage.type === "success" ? "rgba(16,185,129,0.25)" : "rgba(239,68,68,0.22)"}`
-                        }}
-                      >
-                        {statusMessage.text}
-                      </div>
-                    )}
-
-                    <p className="mt-2.5 text-[10px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                      {language === "EN"
-                        ? "Archived tenders are auto-deleted after 3 days."
-                        : "Tender yang diarsipkan akan dihapus otomatis setelah 3 hari."}
-                    </p>
-                  </div>
-                )}
 
                 {/* ── Ulasan (Di bawah tombol LPSE) ── */}
-                <ReviewSection itemId={(item as any)._id || item.lelangId || String(item.id)} itemType={item.tipe || "Tender"} userId={userId} userName={userName} language={language} />
+                <ReviewSection itemId={(item as any)._id || item.lelangId || String(item.id)} itemType={item.tipe || "Tender"} userId={userId} userName={userName} userAvatar={userAvatar} language={language} />
 
               </div>
 
@@ -2092,7 +2060,7 @@ export default function DetailModal({ item, onClose, language, isPinned = false,
                 )}
 
                 {/* ── Ulasan (Di bawah tombol Vendor) ── */}
-                <ReviewSection itemId={(item as any)._id || String(item.id)} itemType="Barang" userId={userId} userName={userName} language={language} />
+                <ReviewSection itemId={(item as any)._id || String(item.id)} itemType="Barang" userId={userId} userName={userName} userAvatar={userAvatar} language={language} />
 
               </div>
 

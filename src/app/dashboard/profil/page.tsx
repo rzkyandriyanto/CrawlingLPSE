@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { useDashboard } from "../DashboardContext";
 // supabase import removed
 import ProfileView from "@/components/profil/ProfileView";
+import { toast } from "react-hot-toast";
 
 const DAFTAR_BIDANG = [
   "Teknologi",
@@ -93,7 +94,7 @@ export default function ProfilPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert("Gagal menyimpan: " + (data.error || "Kesalahan server"));
+        toast.error("Gagal menyimpan: " + (data.error || "Kesalahan server"));
         return;
       }
       const updatedUser = {
@@ -110,7 +111,7 @@ export default function ProfilPage() {
       setIsEditingProfile(false);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Terjadi kesalahan";
-      alert("Error: " + message);
+      toast.error("Error: " + message);
     } finally {
       setProfileSaving(false);
     }
@@ -142,7 +143,7 @@ export default function ProfilPage() {
       localStorage.setItem("currentUser", JSON.stringify(updatedUser));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Terjadi kesalahan";
-      alert("Gagal upload foto: " + message);
+      toast.error("Gagal upload foto: " + message);
     } finally {
       setUploadingFoto(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

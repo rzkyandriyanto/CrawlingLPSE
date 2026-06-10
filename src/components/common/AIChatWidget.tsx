@@ -6,6 +6,7 @@ import { MessageCircle, X, Send, Sparkles, Bot, User, Loader2, History, Plus, Tr
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useDashboard } from "@/app/dashboard/DashboardContext";
+import { toast } from "react-hot-toast";
 
 type Message = {
   role: "user" | "assistant";
@@ -35,7 +36,7 @@ const DetailLinkButton = ({ tenderId, children, setSelectedItem }: { tenderId: s
           if (data.tender) setSelectedItem(data.tender);
         } catch (err) {
           console.error(err);
-          alert("Gagal membuka detail tender.");
+          toast.error("Gagal membuka detail tender.");
         } finally {
           setLoading(false);
         }

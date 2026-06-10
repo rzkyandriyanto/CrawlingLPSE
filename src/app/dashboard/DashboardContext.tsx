@@ -19,6 +19,7 @@ type NotifItem = {
   url_lpse?: string;
   createdAt?: string;
   updatedAt?: string;
+  originalTender?: any;
 };
 
 type DashboardContextType = {
@@ -92,20 +93,55 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, [selectedItem]);
 
   useEffect(() => {
-    const checkUser = () => {
+    let intervalId: NodeJS.Timeout;
+
+    const checkUser = async () => {
       const stored = localStorage.getItem("currentUser");
       if (!stored) {
         router.push("/login");
         return;
       }
       try {
-        const p = JSON.parse(stored) as StoredUser;
+        const p = JSON.parse(stored) as StoredUser & { session_token?: string };
         setUser(p);
+        
+        // Fungsi Verifikasi session token ke server
+        const verifySession = async () => {
+          if (p.id && p.session_token) {
+            try {
+              const res = await fetch("/api/auth/verify-session", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: p.id, session_token: p.session_token })
+              });
+              
+              if (!res.ok) {
+                // Session tidak valid (mungkin login di tempat lain)
+                handleLogout();
+              }
+            } catch (error) {
+              console.error("Gagal memverifikasi sesi", error);
+            }
+          }
+        };
+
+        // Jalankan sekali saat pertama kali muat
+        await verifySession();
+
+        // Lalu cek secara berkala setiap 30 detik
+        intervalId = setInterval(verifySession, 30000);
+
       } catch {
         router.push("/login");
       }
     };
+
     checkUser();
+
+    // Bersihkan interval jika komponen dilepas
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [router]);
 
   // ── Draining notification queue: show one by one with 5s gap ──────────────
@@ -277,7 +313,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.15 } }}
             className="fixed bottom-6 right-6 z-[9999] max-w-[340px] w-full cursor-pointer rounded-2xl overflow-hidden shadow-xl"
             onClick={() => {
-              if (notification.lelangId || notification.url_lpse) {
+              if (notification.originalTender) {
+                setSelectedItem(notification.originalTender as any);
+                setNotification(null); // dismiss popup
+              } else if (notification.lelangId || notification.url_lpse) {
                 setSelectedItem({
                   id: notification.lelangId || notification.id,
                   link: notification.url_lpse || `https://lpse.lkpp.go.id/eproc4/lelang/${notification.lelangId}/pengumumanlelang`,
@@ -313,7 +352,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
               {/* Icon */}
               <div
-                className="w-12 h-12 flex-shrink-0 rounded-full flex items-center justify-center text-white shadow-sm mt-0.5"
+                className={`w-12 h-12 flex-shrink-0 flex items-center justify-center text-white shadow-sm mt-0.5 ${notification.type === "new_tender" ? "rounded-xl" : "rounded-full"}`}
                 style={{
                   background: notification.type === "new_tender"
                     ? "linear-gradient(135deg, #22c55e, #16a34a)"

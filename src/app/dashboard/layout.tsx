@@ -139,6 +139,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             isPinned={pinnedItems.some((p) => p.id === selectedItem.id)}
             userId={user?.id}
             userName={user?.nama || user?.perusahaan || "Pengguna"}
+            userAvatar={user?.avatar_url}
             onTogglePin={togglePin}
             onStatusUpdate={(tenderId, newStatus) => {
               // Update status di pinnedItems secara optimistik

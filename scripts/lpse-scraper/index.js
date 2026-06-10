@@ -156,8 +156,12 @@ function classifyPaket(nama) {
 async function classifyWithAIBatch(packages) {
   if (!packages || packages.length === 0) return {};
   
-  const apiKey = process.env.OPENROUTER_SCRAPER_API_KEY || process.env.OPENROUTER_API_KEY;
-  if (!apiKey) return packages.reduce((acc, p) => ({...acc, [p]: "Lainnya"}), {});
+  const apiKeys = [
+    process.env.OPENROUTER_SCRAPER_API_KEY,
+    process.env.OPENROUTER_FALLBACK_API_KEY
+  ].filter(Boolean);
+
+  if (apiKeys.length === 0) return packages.reduce((acc, p) => ({...acc, [p]: "Lainnya"}), {});
 
   const prompt = `Tugas Anda mengklasifikasikan judul tender ke dalam HANYA salah satu kategori berikut: Teknologi, Konstruksi, Kesehatan, Pangan, Konsultansi, Pendidikan, Otomotif, Logistik, Jasa Umum. Jika sama sekali tidak masuk, kembalikan "Lainnya".
 
@@ -166,9 +170,20 @@ ${JSON.stringify(packages)}
 
 KEMBALIKAN HANYA SEBUAH OBJEK JSON (tanpa backticks, tanpa format markdown, tanpa penjelasan apa pun) dengan judul sebagai key dan kategori sebagai value. Contoh: {"Pengadaan laptop ASUS": "Teknologi"}`;
 
+  const models = [
+    "google/gemini-2.0-flash-exp:free",
+    "meta-llama/llama-3.1-8b-instruct:free",
+    "nousresearch/hermes-3-llama-3.1-405b:free"
+  ];
+
   try {
-    // Retry fetch if rate limited (max 3 times)
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    let keyIndex = 0;
+    let modelIndex = 0;
+    // Retry fetch if rate limited (max 6 times)
+    for (let attempt = 1; attempt <= 6; attempt++) {
+      const apiKey = apiKeys[keyIndex % apiKeys.length];
+      const model = models[modelIndex % models.length];
+      
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -176,28 +191,33 @@ KEMBALIKAN HANYA SEBUAH OBJEK JSON (tanpa backticks, tanpa format markdown, tanp
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "meta-llama/llama-3.3-70b-instruct:free", // WAJIB pakai model gratis agar tidak kena cek saldo
+          model: model, 
           messages: [{ role: "user", content: prompt }]
         })
       });
 
       if (response.status === 429) {
-        console.log(`[AI] Rate limit terkena. Menunggu ${attempt * 2} detik...`);
-        await new Promise(r => setTimeout(r, attempt * 2000));
+        console.log(`[AI] Rate limit terkena (Key: ${keyIndex % apiKeys.length}, Model: ${model}). Ganti API Key/Model dan tunggu 15 detik...`);
+        keyIndex++;
+        modelIndex++; // Ganti model juga agar tidak nyangkut di provider yang sama
+        await new Promise(r => setTimeout(r, 15000));
         continue;
       }
 
       const data = await response.json();
       if (!data || !data.choices || !data.choices[0]) {
-        console.error(`[AI] OpenRouter Error (Attempt ${attempt}):`, JSON.stringify(data));
-        throw new Error(`OpenRouter Error: ${data?.error?.message || "Format tidak valid"}`);
+        console.error(`[AI] OpenRouter Error pada model ${model} (Attempt ${attempt}):`, JSON.stringify(data));
+        // Jika error provider (bukan rate limit), coba ganti model
+        modelIndex++;
+        await new Promise(r => setTimeout(r, 1000));
+        continue;
       }
       
       let text = data.choices[0].message.content.trim();
       text = text.replace(/^```json/i, "").replace(/^```/i, "").replace(/```$/i, "").trim();
       return JSON.parse(text);
     }
-    throw new Error("Rate limit exceeded after retries");
+    throw new Error("Rate limit exceeded after retries on all keys");
   } catch (err) {
     console.log("[AI] Gagal klasifikasi:", err.message);
     return packages.reduce((acc, p) => ({...acc, [p]: "Lainnya"}), {});
@@ -373,6 +393,10 @@ async function scrapeBatch(batch, progressObj) {
             if (aiResults[item.nama_paket] && aiResults[item.nama_paket] !== "Lainnya") {
               item.tag = aiResults[item.nama_paket];
             }
+          }
+          // Tambahkan jeda aman antar chunk untuk model gratis
+          if (i + CHUNK_SIZE < packageNames.length) {
+            await new Promise(r => setTimeout(r, 5000));
           }
         }
       }

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { Toaster } from "react-hot-toast";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -32,6 +33,7 @@ export default function RootLayout({
         <ThemeProvider>
           {children}
         </ThemeProvider>
+        <Toaster position="top-center" reverseOrder={false} />
       </body>
     </html>
   );

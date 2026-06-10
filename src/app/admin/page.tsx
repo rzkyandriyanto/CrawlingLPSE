@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 // supabase import removed
 import { motion, AnimatePresence } from "framer-motion";
 import { Users, Package, ShoppingBag, Activity, ArrowUpRight, TrendingUp, X, Mail, Key, Building, Briefcase } from "lucide-react";
+import { toast } from "react-hot-toast";
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({ users: 0, jasa: 0, produk: 0, lpseTotal: 0, barang: 0 });
@@ -40,7 +41,10 @@ export default function AdminDashboard() {
     try {
       const res = await fetch("/api/admin/data?table=paket_lelang");
       const { data: jasa } = await res.json();
-      if (!jasa || jasa.length === 0) return alert("Tidak ada data untuk didownload.");
+      if (!jasa || jasa.length === 0) {
+        toast.error("Tidak ada data untuk didownload.");
+        return;
+      }
 
       const headers = ["ID", "Nama Paket", "Instansi", "Pagu", "HPS", "Kategori"];
       const csvContent = [
@@ -59,7 +63,7 @@ export default function AdminDashboard() {
       document.body.removeChild(link);
     } catch (err) {
       console.error("Gagal mendownload CSV:", err);
-      alert("Terjadi kesalahan saat mengunduh data.");
+      toast.error("Terjadi kesalahan saat mengunduh data.");
     }
   };
 
@@ -67,8 +71,8 @@ export default function AdminDashboard() {
     const currentUser = localStorage.getItem("currentUser");
     localStorage.clear();
     if (currentUser) localStorage.setItem("currentUser", currentUser);
-    alert("System cache cleared successfully!");
-    window.location.reload();
+    toast.success("System cache cleared successfully!");
+    setTimeout(() => { window.location.reload(); }, 1000);
   };
 
   const handleAddAdminSubmit = async (e: React.FormEvent) => {
@@ -85,9 +89,9 @@ export default function AdminDashboard() {
 
       setIsSubmitting(false);
       if (!res.ok) {
-        alert("Gagal menambah admin: " + (data.error || "Kesalahan server"));
+        toast.error("Gagal menambah admin: " + (data.error || "Kesalahan server"));
       } else {
-        alert("Admin Baru Berhasil Ditambahkan!");
+        toast.success("Admin Baru Berhasil Ditambahkan!");
         setIsModalOpen(false);
         setNewAdmin({ email: "", password: "", perusahaan: "" });
         
@@ -100,7 +104,7 @@ export default function AdminDashboard() {
       }
     } catch (err: any) {
       setIsSubmitting(false);
-      alert("Error: " + err.message);
+      toast.error("Error: " + err.message);
     }
   };
 

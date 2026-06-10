@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { LayoutDashboard, Users, Database, LogOut, ChevronRight, Menu, X, LineChart, Home } from "lucide-react";
+import { toast } from "react-hot-toast";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -11,20 +12,43 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
 
   useEffect(() => {
-    const userStr = localStorage.getItem("currentUser");
-    if (!userStr) {
-      router.push("/login");
-      return;
-    }
+    const checkAdmin = async () => {
+      const userStr = localStorage.getItem("currentUser");
+      if (!userStr) {
+        router.push("/login");
+        return;
+      }
 
-    const user = JSON.parse(userStr);
-    if (user.role !== "admin") {
-      alert("Akses Ditolak! Anda bukan Admin.");
-      router.push("/dashboard");
-      return;
-    }
+      const user = JSON.parse(userStr) as any;
+      if (user.role !== "admin") {
+        toast.error("Akses Ditolak! Anda bukan Admin.");
+        router.push("/dashboard");
+        return;
+      }
 
-    setIsAdmin(true);
+      // Verifikasi session token ke server
+      if (user.id && user.session_token) {
+        try {
+          const res = await fetch("/api/auth/verify-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: user.id, session_token: user.session_token })
+          });
+          
+          if (!res.ok) {
+            localStorage.removeItem("currentUser");
+            router.push("/login");
+            return;
+          }
+        } catch (e) {
+          console.error("Session verification failed", e);
+        }
+      }
+
+      setIsAdmin(true);
+    };
+
+    checkAdmin();
   }, [router]);
 
   const navItems = [

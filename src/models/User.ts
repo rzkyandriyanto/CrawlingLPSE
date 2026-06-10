@@ -14,6 +14,11 @@ const UserSchema = new mongoose.Schema({
   provinsi: { type: String, default: "" },
   // Riwayat keyword pencarian (maksimal 20 terakhir)
   search_history: { type: [String], default: [] },
+  session_token: { type: String, default: "" },
+  login_attempts: { type: Number, default: 0 },
+  lock_until: { type: Date, default: null },
+  last_ip: { type: String, default: null },
+  last_user_agent: { type: String, default: null },
 }, { timestamps: true });
 if (mongoose.models?.User) {
   delete mongoose.models.User;

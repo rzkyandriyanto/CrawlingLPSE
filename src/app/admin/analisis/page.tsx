@@ -6,6 +6,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   PieChart, Pie, Cell, Legend, ComposedChart, Line, Area
 } from "recharts";
+import { toast } from "react-hot-toast";
 
 interface InsightData {
   total: number;
@@ -88,11 +89,11 @@ export default function AdminAnalisisPage() {
         setInsights(json.insights);
         setData(json.data || []);
       } else {
-        alert("Gagal mengambil data: " + json.error);
+        toast.error("Gagal mengambil data: " + json.error);
       }
     } catch (err) {
       console.error(err);
-      alert("Terjadi kesalahan jaringan.");
+      toast.error("Terjadi kesalahan jaringan.");
     } finally {
       setLoading(false);
     }
