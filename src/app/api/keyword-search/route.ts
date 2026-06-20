@@ -6,86 +6,128 @@ import { UserModel } from "@/models/User";
 import { KOTA_PROVINSI_MAP, ADJACENCY_MAP, ISLANDS } from "@/lib/geoMap";
 
 // ─── Fungsi hitung skor relevansi (0-100) ───────────────────────────────────
+// MODE 1 (Tanpa CP): pakai algoritma wilayah dari profil user (kota/provinsi)
+// MODE 2 (Dengan CP): algoritma wilayah digantikan oleh wilayah_operasi CP
 function calcRelevanceScore(
   tender: any,
-  userProfile: { provinsi?: string; topKategori?: string[]; topTags?: string[]; topWilayah?: string[]; topKeywords?: string[]; bidang_minat?: string[] } | null
+  userProfile: { provinsi?: string; kota?: string; company_profile?: any } | null
 ): number {
   if (!userProfile) return 0;
-  let score = 0;
+
   const wilayah = (tender.wilayah || "").toLowerCase();
   const instansi = (tender.instansi || "").toLowerCase();
   const namaPaket = (tender.nama_paket || "").toLowerCase();
   const kategori = (tender.kategori || "");
   const tagTender = (tender.tag || "");
+  const tenderStr = (wilayah + " " + instansi);
 
-  // 1. Geografis (Maks +30) - Diturunkan agar perilaku (behavior) bisa lebih mendominasi
-  if (userProfile.provinsi) {
-    const pUser = userProfile.provinsi.toLowerCase();
-    const tenderStr = (wilayah + " " + instansi);
+  const cp = userProfile.company_profile;
+
+  // ══════════════════════════════════════════════════════
+  // MODE 2: DENGAN CP → wilayah_operasi menggantikan profil
+  // ══════════════════════════════════════════════════════
+  if (cp) {
+    const wilayahOps: string[] = (cp.wilayah_operasi || []).map((w: string) => w.toLowerCase());
+    const isNasional = wilayahOps.some((w: string) =>
+      w.includes("nasional") || w.includes("indonesia") || w.includes("seluruh")
+    );
+
+    // Hitung skor_wilayah berdasarkan wilayah_operasi CP
+    let skor_wilayah = 30; // Default: tender di luar jangkauan
     
+    // Cek apakah tender match dengan wilayah eksplisit (contoh: "Malang", "Denpasar")
+    const explicitMatch = wilayahOps.some((wOp: string) => {
+      // Abaikan kata kunci catch-all saat mencari match eksplisit
+      if (wOp === "nasional" || wOp === "indonesia" || wOp === "seluruh") return false;
+      return tenderStr.includes(wOp) || wOp.split(/[,\s]+/).some((part: string) => part.length > 3 && tenderStr.includes(part));
+    });
+
+    if (explicitMatch) {
+      skor_wilayah = 100; // Wilayah yang disebut spesifik dapet prioritas utama
+    } else if (isNasional) {
+      skor_wilayah = 70; // Wilayah lain masuk kualifikasi (karena 'nasional') tapi bukan prioritas utama
+    }
+
+    // Skor Bidang (Maks 100)
+    let skor_bidang = 0;
+    const allBidang = [...(cp.bidang_usaha || []), ...(cp.kode_kbli || []), ...(cp.sub_bidang || [])];
+    allBidang.forEach((b: string) => {
+      if (b.length > 2 && (kategori.toLowerCase().includes(b.toLowerCase()) || tagTender.toLowerCase().includes(b.toLowerCase()))) {
+        skor_bidang += 50;
+      }
+    });
+    skor_bidang = Math.min(skor_bidang, 100);
+
+    // Skor Keyword (Maks 100)
+    let skor_keyword = 0;
+    if (cp.kata_kunci_layanan?.length > 0) {
+      cp.kata_kunci_layanan.forEach((kw: string) => {
+        if (kw.length > 2 && namaPaket.includes(kw.toLowerCase())) skor_keyword += 50;
+      });
+    }
+    skor_keyword = Math.min(skor_keyword, 100);
+
+    // Skor Nilai (Maks 100)
+    let skor_nilai = 50; // Neutral default
+    if (cp.nilai_proyek_max && cp.nilai_proyek_max > 0) {
+      const paguNum = Number((tender.pagu || "0").replace(/Rp/gi, "").replace(/\./g, "").replace(/,/g, ".").replace(/[^0-9.]/g, ""));
+      if (paguNum > 0 && paguNum <= cp.nilai_proyek_max * 1.5) skor_nilai = 100;
+      else if (paguNum > 0) skor_nilai = 30;
+    }
+
+    // Formula CP: wilayah_operasi + doping bidang/keyword/nilai
+    const bonus_cp = Math.round(((skor_bidang * 0.40) + (skor_keyword * 0.35) + (skor_nilai * 0.25)) * 0.30);
+    
+    let final_score = skor_wilayah + bonus_cp;
+    if (!explicitMatch && isNasional) {
+      // Cap tender nasional di 95 agar wilayah spesifik (bisa 100) selalu tampil di atas
+      final_score = Math.min(95, final_score);
+    }
+    
+    return Math.min(100, final_score);
+  }
+
+  // ══════════════════════════════════════════════════════
+  // MODE 1: TANPA CP → algoritma wilayah dari profil user
+  // ══════════════════════════════════════════════════════
+  const pUser = (userProfile.provinsi || "").toLowerCase();
+  const kUser = (userProfile.kota || "").toLowerCase();
+
+  let skor_wilayah = 30;
+  if (kUser && tenderStr.includes(kUser)) {
+    skor_wilayah = 100;
+  } else if (pUser && tenderStr.includes(pUser)) {
+    skor_wilayah = 70;
+  } else {
     let tenderProv = "";
     for (const [key, val] of Object.entries(KOTA_PROVINSI_MAP)) {
       if (tenderStr.includes(key.toLowerCase())) { tenderProv = val.toLowerCase(); break; }
     }
-    
     if (!tenderProv) {
-      const allProvinces = Object.keys(ADJACENCY_MAP);
-      for (const p of allProvinces) {
+      for (const p of Object.keys(ADJACENCY_MAP)) {
         if (tenderStr.includes(p) || (p === "dki jakarta" && tenderStr.includes("jakarta")) || (p === "di yogyakarta" && tenderStr.includes("yogyakarta"))) {
           tenderProv = p; break;
         }
       }
     }
-
-    if (tenderProv) {
-      if (tenderProv === pUser) score += 30; // Sama persis
-      else if (ADJACENCY_MAP[pUser]?.includes(tenderProv)) score += 15; // Tetangga
-      else {
-        let userIsland = "", tenderIsland = "";
-        for (const [island, provs] of Object.entries(ISLANDS)) {
-          if (provs.includes(pUser)) userIsland = island;
-          if (provs.includes(tenderProv)) tenderIsland = island;
-        }
-        if (userIsland && userIsland === tenderIsland) score += 5; // 1 Pulau
-      }
-    } else {
-      if (tenderStr.includes(pUser)) score += 30;
-    }
+    if (tenderProv === pUser) skor_wilayah = 70;
   }
 
-  // 2. Kategori Statis dari Profil & Pin (Maks +20)
-  if ((userProfile.topKategori || []).includes(kategori)) score += 10;
-  
-  if ((userProfile.bidang_minat || []).some((b: string) => 
-    kategori.toLowerCase().includes(b.toLowerCase()) || 
-    tagTender.toLowerCase().includes(b.toLowerCase()) ||
-    namaPaket.includes(b.toLowerCase())
-  )) score += 10;
-
-  // 3. TIKTOK-STYLE SENSITIVITY: Top Tags (Spesifik) dari Pin (Maks +20)
-  // Jika tender punya Tag (spesifik) yang sering di-pin user
-  if (tagTender && (userProfile.topTags || []).includes(tagTender)) {
-    score += 20; 
-  }
-
-  // 4. TIKTOK-STYLE SENSITIVITY: Cumulative Search History (Maks +45)
-  // Setiap kata kunci pencarian yang cocok di judul tender = +15 poin!
-  // Jika tender mengandung 3 kata kunci yang baru-baru ini dicari user, langsung dapat 45 poin (super relevan)
-  let keywordHits = 0;
-  (userProfile.topKeywords || []).forEach((kw: string) => {
-    if (kw.length > 2 && namaPaket.includes(kw.toLowerCase())) {
-      keywordHits++;
-    }
-  });
-  score += Math.min(keywordHits * 15, 45);
-
-  return Math.min(score, 100);
+  return skor_wilayah;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { keyword, bidang = [], filterWilayah, filterTipe, filterStatus, offset = 0, userId } = body;
+    // Guard: handle empty or malformed request body
+    let body: any = {};
+    try {
+      const text = await req.text();
+      if (text && text.trim()) body = JSON.parse(text);
+    } catch {
+      return NextResponse.json({ items: [], total: 0 }, { status: 200 });
+    }
+
+    const { keyword, bidang = [], filterWilayah, filterTipe, filterStatus, offset = 0, userId, extraRegions } = body;
 
     const trimmedKeyword = (keyword || "").trim();
     const targetLpse = filterWilayah || "";
@@ -154,11 +196,27 @@ export async function POST(req: NextRequest) {
         andConditions.push({ nama_paket: { $regex: /belanja/i } });
       }
 
+      // ── Ambil profil personalisasi user terlebih dahulu ──
+      let userProfile: any = null;
+      if (userId) {
+        try {
+          const userDoc = await UserModel.findById(userId).select("provinsi kota bidang_minat search_history company_profile").lean() as any;
+          if (userDoc) {
+            userProfile = {
+              provinsi: userDoc.provinsi || "",
+              bidang_minat: userDoc.bidang_minat || [],
+              company_profile: userDoc.company_profile || null,
+            };
+          }
+        } catch (err) {
+          console.warn("[personalization] Gagal ambil profil user awal:", err);
+        }
+      }
+
       // Menggunakan STRICT FILTER: Hanya data yang cocok dengan bidang user yang akan diambil
       if (bidang && bidang.length > 0) {
         const orConditions: any[] = [];
         bidang.forEach((b: string) => {
-          // Hanya filter berdasarkan tag atau kategori, jangan nama_paket agar tidak salah tangkap (false positive)
           orConditions.push({ tag: { $regex: `^${b}$`, $options: "i" } });
           orConditions.push({ tag: { $regex: b, $options: "i" } }); // fallback
           orConditions.push({ kategori: { $regex: b, $options: "i" } });
@@ -166,8 +224,55 @@ export async function POST(req: NextRequest) {
         andConditions.push({ $or: orConditions });
       }
 
+      // STOP WORDS untuk wilayah agar 'kota' atau 'kabupaten' tidak menjadi keyword pencarian mandiri
+      const regionStopWords = ["kota", "kabupaten", "kab", "provinsi", "prov", "daerah", "pusat"];
+
+      // STRICT WILAYAH FILTER (dari CP atau extraRegions)
+      if (extraRegions && extraRegions.length > 0) {
+        // Jika user melakukan pencarian wilayah lain (extraRegions)
+        const wilayahOrConditions: any[] = [];
+        extraRegions.forEach((wOp: string) => {
+          const parts = wOp.split(/[,\s]+/).filter((p: string) => p.length > 3 && !regionStopWords.includes(p.toLowerCase()));
+          parts.forEach((p: string) => {
+            wilayahOrConditions.push({ wilayah: { $regex: p, $options: "i" } });
+            wilayahOrConditions.push({ instansi: { $regex: p, $options: "i" } });
+          });
+          wilayahOrConditions.push({ wilayah: { $regex: wOp, $options: "i" } });
+          wilayahOrConditions.push({ instansi: { $regex: wOp, $options: "i" } });
+        });
+        if (wilayahOrConditions.length > 0) {
+          andConditions.push({ $or: wilayahOrConditions });
+        }
+      } else if (userProfile?.company_profile) {
+        // Jika tidak ada extraRegions, gunakan strict filter bawaan CP
+        const cp = userProfile.company_profile;
+        const wilayahOps = (cp.wilayah_operasi || []).map((w: string) => w.toLowerCase());
+        const isNasional = wilayahOps.some((w: string) =>
+          w.includes("nasional") || w.includes("indonesia") || w.includes("seluruh")
+        );
+
+        if (!isNasional && wilayahOps.length > 0) {
+          const wilayahOrConditions: any[] = [];
+          wilayahOps.forEach((wOp: string) => {
+            const parts = wOp.split(/[,\s]+/).filter((p: string) => p.length > 3 && !regionStopWords.includes(p.toLowerCase()));
+            parts.forEach((p: string) => {
+              wilayahOrConditions.push({ wilayah: { $regex: p, $options: "i" } });
+              wilayahOrConditions.push({ instansi: { $regex: p, $options: "i" } });
+            });
+            wilayahOrConditions.push({ wilayah: { $regex: wOp, $options: "i" } });
+            wilayahOrConditions.push({ instansi: { $regex: wOp, $options: "i" } });
+          });
+          
+          if (wilayahOrConditions.length > 0) {
+            andConditions.push({ $or: wilayahOrConditions });
+          }
+        }
+      }
+
       if (targetLpse && targetLpse !== "Semua Instansi (Otomatis)") {
-        query.instansi = { $regex: targetLpse.replace("LPSE ", ""), $options: "i" };
+        if (!extraRegions || extraRegions.length === 0) {
+          query.instansi = { $regex: targetLpse.replace("LPSE ", ""), $options: "i" };
+        }
       }
 
       if (andConditions.length > 0) {
@@ -214,7 +319,7 @@ export async function POST(req: NextRequest) {
       if (userId) {
         try {
           const userDoc = await UserModel.findById(userId)
-            .select("provinsi kota bidang_minat search_history")
+            .select("provinsi kota bidang_minat search_history company_profile")
             .lean() as any;
           if (userDoc) {
             // Hitung top kategori, wilayah, & tag dari tender yang dipin
@@ -238,6 +343,7 @@ export async function POST(req: NextRequest) {
               topTags: Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t]) => t),
               topWilayah: Object.entries(wilCount).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([w]) => w),
               topKeywords: Array.from(new Set([...(userDoc.search_history || [])].reverse())).slice(0, 10),
+              company_profile: userDoc.company_profile || null,
             };
 
             // Simpan keyword ke search_history jika ada keyword
@@ -513,6 +619,12 @@ export async function POST(req: NextRequest) {
     const earlyStageTenders = cleanItems
       .filter((item) => {
         const t = (item.tahap_saat_ini || "").toLowerCase();
+        const status = (item.status || "").toLowerCase();
+        
+        // Jangan tampilkan di tahap awal kalau tender sudah selesai/batal/gagal
+        if (status === "selesai" || status === "menang" || status === "batal" || status === "gagal") return false;
+        if (t.includes("selesai") || t.includes("pemenang") || t.includes("batal") || t.includes("gagal")) return false;
+
         const isAwal = t.includes("pengumuman") || t.includes("download") || t.includes("pendaftaran");
         if (!isAwal) return false;
 

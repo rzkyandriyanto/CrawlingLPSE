@@ -42,3 +42,8 @@ next-env.d.ts
 
 # scratch folder
 scratch/
+
+# upload folder
+/public/uploads/
+uploads/
+uplod/

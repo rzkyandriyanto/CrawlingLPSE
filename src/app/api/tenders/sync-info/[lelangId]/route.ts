@@ -322,7 +322,7 @@ export async function GET(
 
     const tahapSaatIniDB = String(tender?.tahap_saat_ini || "").toLowerCase();
     const isFinishedInDB = tahapSaatIniDB.includes("selesai") || tahapSaatIniDB.includes("pemenang");
-    const needsStatusUpdate = isFinishedInDB && tender?.status !== "selesai";
+    const needsStatusUpdate = isFinishedInDB && tender?.status !== "selesai" && tender?.status !== "menang";
     const missingWinnerData = tender?.status === "selesai" && !tender?.pemenang_nama;
     const missingSyaratHtml = tender?.syarat_kualifikasi && !tender.syarat_kualifikasi.includes("<table");
     
@@ -330,15 +330,15 @@ export async function GET(
     const isEvaluasiStageDB = tahapSaatIniDB.includes("evaluasi") || tahapSaatIniDB.includes("penetapan") || tahapSaatIniDB.includes("sanggah") || isFinishedInDB;
     const missingEvaluasiData = isEvaluasiStageDB && (!tender?.peserta_evaluasi || !tender.peserta_evaluasi.rows || tender.peserta_evaluasi.rows.length === 0);
 
-    // Jika sudah ada data dan masih segar (< 24 jam), DAN tidak membutuhkan update status/data pemenang, kembalikan langsung
+    // Jika sudah ada data detail (satuan kerja ada), DAN tidak membutuhkan update status/data pemenang, kembalikan langsung dari DB.
+    // Kita hapus batasan waktu 24 jam agar server tidak berat melakukan crawling berulang tanpa alasan yang jelas.
     if (
       !needsStatusUpdate &&
       !missingWinnerData &&
       !missingSyaratHtml &&
       !missingEvaluasiData &&
       tender?.info_synced_at &&
-      tender?.satuan_kerja &&
-      Date.now() - new Date(tender.info_synced_at).getTime() < CACHE_DURATION_MS
+      tender?.satuan_kerja
     ) {
       return NextResponse.json({
         source: "database",
@@ -397,8 +397,8 @@ export async function GET(
       info_synced_at: now,
     };
 
-    if (scrapedData.status === "selesai") {
-      updatePayload.finished_at = now;
+    if (scrapedData.status === "selesai" || (scrapedData.pemenang_nama && String(scrapedData.pemenang_nama).trim().length > 2)) {
+      updatePayload.finished_at = tender?.finished_at || now;
       if (!tender?.archived_at) {
         updatePayload.archived_at = now;
         updatePayload.archived_reason = "Tender telah selesai";
@@ -406,6 +406,8 @@ export async function GET(
       // Jika data pemenang berhasil diambil → update status ke "menang"
       if (scrapedData.pemenang_nama && String(scrapedData.pemenang_nama).trim().length > 2) {
         updatePayload.status = "menang";
+      } else {
+        updatePayload.status = "selesai";
       }
     }
 

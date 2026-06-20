@@ -11,6 +11,7 @@ export type StoredUser = {
   foto_url?: string;
   avatar_url?: string;
   search_history?: string[];
+  company_profile?: any;
 };
 
 export type SearchResultItem = {

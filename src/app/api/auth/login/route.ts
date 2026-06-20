@@ -121,7 +121,8 @@ export async function POST(req: NextRequest) {
       avatar_url: user.avatar_url,
       kota: user.kota,
       provinsi: user.provinsi,
-      session_token: sessionToken
+      session_token: sessionToken,
+      company_profile: user.company_profile || null
     };
 
     return NextResponse.json({ user: userToReturn }, { status: 200 });

@@ -45,7 +45,9 @@ export default function ProfilPage() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState(false);
+  const [uploadingCp, setUploadingCp] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
   
   const [profileForm, setProfileForm] = useState({
     perusahaan: "",
@@ -150,6 +152,51 @@ export default function ProfilPage() {
     }
   };
 
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 100 * 1024 * 1024) {
+      toast.error("Ukuran PDF maksimal 100MB");
+      return;
+    }
+
+    setUploadingCp(true);
+    const toastId = toast.loading(language === "EN" ? "Extracting Company Profile with AI..." : "Mengekstrak Company Profile dengan AI...");
+    
+    try {
+      const formData = new FormData();
+      formData.append("cp_pdf", file);
+      formData.append("userId", String(user.id));
+
+      const res = await fetch("/api/upload-cp", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || "Gagal mengunggah PDF");
+
+      const cp = data.company_profile;
+
+      // Update user state: hanya CP, lokasi tidak diubah otomatis
+      // (karena perusahaan bisa beroperasi di banyak wilayah/nasional)
+      // Lokasi tetap sesuai profil yang user isi manual.
+      const updatedUser = { ...user, company_profile: cp };
+      setUser(updatedUser);
+      localStorage.setItem("currentUser", JSON.stringify(updatedUser));
+      
+      toast.success(language === "EN" ? "Company Profile successfully extracted!" : "Company Profile berhasil diekstrak!", { id: toastId });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Terjadi kesalahan";
+      toast.error("Gagal: " + message, { id: toastId });
+    } finally {
+      setUploadingCp(false);
+      if (pdfInputRef.current) pdfInputRef.current.value = "";
+    }
+  };
+
   const toggleProfileTag = (b: string) => {
     setProfileForm((prev) => {
       let fresh = [...prev.tag];
@@ -194,11 +241,14 @@ export default function ProfilPage() {
           user={user}
           language={language}
           uploadingFoto={uploadingFoto}
+          uploadingCp={uploadingCp}
           isEditingProfile={isEditingProfile}
           profileSaving={profileSaving}
           profileForm={profileForm}
           fileInputRef={fileInputRef}
+          pdfInputRef={pdfInputRef}
           onFotoUpload={handleFotoUpload}
+          onPdfUpload={handlePdfUpload}
           onStartEditing={startEditingProfile}
           onCancelEditing={cancelEditingProfile}
           onSaveProfile={saveProfile}

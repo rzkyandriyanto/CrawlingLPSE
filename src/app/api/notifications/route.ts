@@ -4,10 +4,12 @@ import { TenderModel } from "@/models/Tender";
 import { UserModel } from "@/models/User";
 import { KOTA_PROVINSI_MAP, ADJACENCY_MAP, ISLANDS } from "@/lib/geoMap";
 
-// ─── Hitung skor relevansi singkat (untuk filter notif) ──────────────────────
+// ─── Hitung skor relevansi (untuk filter notif) ───────────────────────────
+// MODE 1 (Tanpa CP): pakai algoritma wilayah dari profil user (kota/provinsi)
+// MODE 2 (Dengan CP): algoritma wilayah digantikan oleh wilayah_operasi CP
 function calcRelevanceScore(tender: any, userProfile: any): number {
   if (!userProfile) return 0;
-  let score = 0;
+
   const wilayah = (tender.wilayah || "").toLowerCase();
   const instansi = (tender.instansi || "").toLowerCase();
   const namaPaket = (tender.nama_paket || "").toLowerCase();
@@ -15,38 +17,91 @@ function calcRelevanceScore(tender: any, userProfile: any): number {
   const tagTender = (tender.tag || "");
   const tenderStr = wilayah + " " + instansi;
 
-  if (userProfile.provinsi) {
-    const pUser = userProfile.provinsi.toLowerCase();
+  const cp = userProfile.company_profile;
+
+  // ══════════════════════════════════════════════════════
+  // MODE 2: DENGAN CP → wilayah_operasi menggantikan profil
+  // ══════════════════════════════════════════════════════
+  if (cp) {
+    const wilayahOps: string[] = (cp.wilayah_operasi || []).map((w: string) => w.toLowerCase());
+    const isNasional = wilayahOps.some((w: string) =>
+      w.includes("nasional") || w.includes("indonesia") || w.includes("seluruh")
+    );
+
+    let skor_wilayah = 30;
+    
+    const explicitMatch = wilayahOps.some((wOp: string) => {
+      if (wOp === "nasional" || wOp === "indonesia" || wOp === "seluruh") return false;
+      return tenderStr.includes(wOp) || wOp.split(/[,\s]+/).some((part: string) => part.length > 3 && tenderStr.includes(part));
+    });
+
+    if (explicitMatch) {
+      skor_wilayah = 100;
+    } else if (isNasional) {
+      skor_wilayah = 70;
+    }
+
+    let skor_bidang = 0;
+    const allBidang = [...(cp.bidang_usaha || []), ...(cp.kode_kbli || []), ...(cp.sub_bidang || [])];
+    allBidang.forEach((b: string) => {
+      if (b.length > 2 && (kategori.toLowerCase().includes(b.toLowerCase()) || tagTender.toLowerCase().includes(b.toLowerCase()))) {
+        skor_bidang += 50;
+      }
+    });
+    skor_bidang = Math.min(skor_bidang, 100);
+
+    let skor_keyword = 0;
+    if (cp.kata_kunci_layanan?.length > 0) {
+      cp.kata_kunci_layanan.forEach((kw: string) => {
+        if (kw.length > 2 && namaPaket.includes(kw.toLowerCase())) skor_keyword += 50;
+      });
+    }
+    skor_keyword = Math.min(skor_keyword, 100);
+
+    let skor_nilai = 50;
+    if (cp.nilai_proyek_max && cp.nilai_proyek_max > 0) {
+      const paguNum = Number((tender.pagu || "0").replace(/Rp/gi, "").replace(/\./g, "").replace(/,/g, ".").replace(/[^0-9.]/g, ""));
+      if (paguNum > 0 && paguNum <= cp.nilai_proyek_max * 1.5) skor_nilai = 100;
+      else if (paguNum > 0) skor_nilai = 30;
+    }
+
+    const bonus_cp = Math.round(((skor_bidang * 0.40) + (skor_keyword * 0.35) + (skor_nilai * 0.25)) * 0.30);
+    
+    let final_score = skor_wilayah + bonus_cp;
+    if (!explicitMatch && isNasional) {
+      final_score = Math.min(95, final_score);
+    }
+    
+    return Math.min(100, final_score);
+  }
+
+  // ══════════════════════════════════════════════════════
+  // MODE 1: TANPA CP → algoritma wilayah dari profil user
+  // ══════════════════════════════════════════════════════
+  const pUser = (userProfile.provinsi || "").toLowerCase();
+  const kUser = (userProfile.kota || "").toLowerCase();
+
+  let skor_wilayah = 30;
+  if (kUser && tenderStr.includes(kUser)) {
+    skor_wilayah = 100;
+  } else if (pUser && tenderStr.includes(pUser)) {
+    skor_wilayah = 70;
+  } else {
     let tenderProv = "";
     for (const [key, val] of Object.entries(KOTA_PROVINSI_MAP)) {
       if (tenderStr.includes(key.toLowerCase())) { tenderProv = (val as string).toLowerCase(); break; }
     }
     if (!tenderProv) {
       for (const p of Object.keys(ADJACENCY_MAP)) {
-        if (tenderStr.includes(p)) { tenderProv = p; break; }
+        if (tenderStr.includes(p) || (p === "dki jakarta" && tenderStr.includes("jakarta")) || (p === "di yogyakarta" && tenderStr.includes("yogyakarta"))) {
+          tenderProv = p; break;
+        }
       }
     }
-    if (tenderProv === pUser) score += 40;
-    else if (ADJACENCY_MAP[pUser]?.includes(tenderProv)) score += 20;
-    else {
-      for (const [, provs] of Object.entries(ISLANDS)) {
-        if ((provs as string[]).includes(pUser) && (provs as string[]).includes(tenderProv)) { score += 10; break; }
-      }
-    }
+    if (tenderProv === pUser) skor_wilayah = 70;
   }
-  if ((userProfile.bidang_minat || []).some((b: string) =>
-    kategori.toLowerCase().includes(b.toLowerCase()) ||
-    tagTender.toLowerCase().includes(b.toLowerCase()) ||
-    namaPaket.includes(b.toLowerCase())
-  )) score += 20;
-  if ((userProfile.topKategori || []).includes(kategori)) score += 15;
-  if ((userProfile.topTags || []).includes(tagTender)) score += 15;
-  let kwHits = 0;
-  (userProfile.topKeywords || []).forEach((kw: string) => {
-    if (kw.length > 2 && namaPaket.includes(kw.toLowerCase())) kwHits++;
-  });
-  score += Math.min(kwHits * 10, 30);
-  return Math.min(score, 100);
+
+  return skor_wilayah;
 }
 
 export async function GET(req: NextRequest) {
@@ -61,7 +116,7 @@ export async function GET(req: NextRequest) {
     await connectToDatabase();
 
     // ── Ambil profil user ──────────────────────────────────────────────────
-    const userDoc = await UserModel.findById(userId).select("provinsi bidang_minat search_history").lean() as any;
+    const userDoc = await UserModel.findById(userId).select("provinsi bidang_minat search_history company_profile").lean() as any;
     if (!userDoc) return NextResponse.json({ newTenders: [], pinnedUpdates: [] });
 
     const pinnedTenders = await TenderModel.find(
@@ -83,6 +138,7 @@ export async function GET(req: NextRequest) {
       topKategori: Object.entries(katCount).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k),
       topTags: Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t]) => t),
       topKeywords: Array.from(new Set([...(userDoc.search_history || [])].reverse())).slice(0, 10),
+      company_profile: userDoc.company_profile || null,
     };
 
     // ── 1. TENDER BARU / REKOMENDASI (Ladang History) ────────────────────────
@@ -108,7 +164,14 @@ export async function GET(req: NextRequest) {
         lelangId: t.lelangId,
         url_lpse: t.url_lpse,
         createdAt: t.createdAt,
-        originalTender: { ...t, id: t._id.toString() },
+        originalTender: { 
+          ...t, 
+          id: t._id.toString(),
+          nama_produk: t.nama_paket, // Map untuk DetailModal
+          tipe: t.tipe || "Jasa",
+          kategori: t.kategori || t.tag || "",
+          relevance_score: t.score, // Map untuk badge "Direkomendasikan"
+        },
       }));
 
     // ── 2. UPDATE JADWAL pada tender yang sudah di-Pin ────────────────────────
@@ -132,7 +195,13 @@ export async function GET(req: NextRequest) {
         lelangId: t.lelangId,
         url_lpse: t.url_lpse,
         updatedAt: t.updatedAt,
-        originalTender: { ...t, id: t._id.toString() },
+        originalTender: { 
+          ...t, 
+          id: t._id.toString(),
+          nama_produk: t.nama_paket, // Map untuk DetailModal
+          tipe: t.tipe || "Jasa",
+          kategori: t.kategori || t.tag || "",
+        },
       };
     });
 

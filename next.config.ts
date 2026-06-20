@@ -16,6 +16,7 @@ const nextConfig: NextConfig = {
     "puppeteer-extra-plugin",
     "clone-deep",
     "merge-deep",
+    "pdf-parse",
   ],
 };
 

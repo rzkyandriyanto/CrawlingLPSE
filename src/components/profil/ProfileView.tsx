@@ -11,6 +11,7 @@ type ProfileViewProps = {
   user: StoredUser;
   language: "ID" | "EN";
   uploadingFoto: boolean;
+  uploadingCp?: boolean;
   isEditingProfile: boolean;
   profileSaving: boolean;
   profileForm: {
@@ -22,7 +23,9 @@ type ProfileViewProps = {
     tag: string[];
   };
   fileInputRef: React.RefObject<HTMLInputElement | null>;
+  pdfInputRef?: React.RefObject<HTMLInputElement | null>;
   onFotoUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onPdfUpload?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onStartEditing: () => void;
   onCancelEditing: () => void;
   onSaveProfile: () => void;
@@ -36,11 +39,14 @@ export default function ProfileView({
   user,
   language,
   uploadingFoto,
+  uploadingCp,
   isEditingProfile,
   profileSaving,
   profileForm,
   fileInputRef,
+  pdfInputRef,
   onFotoUpload,
+  onPdfUpload,
   onStartEditing,
   onCancelEditing,
   onSaveProfile,
@@ -49,9 +55,11 @@ export default function ProfileView({
   daftarBidang,
   selectedBidang,
 }: ProfileViewProps) {
+  const cp = user?.company_profile;
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-5xl mx-auto space-y-6">
+        {/* PROFIL PENGGUNA */}
         <div className="rounded-[2rem] border shadow-sm overflow-hidden" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)" }}>
           <div className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-slate-700 h-32 sm:h-40">
             <div
@@ -318,6 +326,118 @@ export default function ProfileView({
                 )}
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* PROFIL PERUSAHAAN (AI Extracted PDF) */}
+        <div className="rounded-[2rem] border shadow-sm overflow-hidden" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)" }}>
+          <div className="px-6 sm:px-8 py-6 sm:py-8">
+            <h2 className="text-xl sm:text-2xl font-black mb-4 flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
+              {language === "EN" ? "Company Profile (AI)" : "Profil Perusahaan (AI)"}
+            </h2>
+            <p className="text-sm font-medium mb-6" style={{ color: "var(--text-secondary)" }}>
+              {language === "EN" 
+                ? "Upload your Company Profile PDF for advanced AI matching capabilities based on service keywords and financial capacity." 
+                : "Unggah PDF Company Profile Anda untuk kemampuan pencocokan AI tingkat lanjut berdasarkan kata kunci layanan dan kapasitas finansial."}
+            </p>
+
+            <div className="mb-8">
+              <input 
+                type="file" 
+                ref={pdfInputRef} 
+                onChange={onPdfUpload} 
+                accept="application/pdf"
+                className="hidden" 
+              />
+              <button
+                type="button"
+                onClick={() => pdfInputRef?.current?.click()}
+                disabled={uploadingCp}
+                className="w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-white transition-all shadow-lg flex justify-center items-center gap-2 disabled:opacity-50"
+                style={{ backgroundColor: "var(--accent)" }}
+              >
+                {uploadingCp ? (
+                  <>
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-dashed border-white" />
+                    {language === "EN" ? "Extracting..." : "Mengekstrak..."}
+                  </>
+                ) : (
+                  <>
+                    <Building2 size={18} /> {language === "EN" ? "Upload Company Profile (PDF)" : "Unggah Company Profile (PDF)"}
+                  </>
+                )}
+              </button>
+            </div>
+
+            {cp && (
+              <div className="space-y-4">
+                <div className="p-4 sm:p-5 rounded-2xl border" style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border-primary)" }}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Tag size={16} style={{ color: "var(--text-muted)" }} />
+                    <span className="text-xs font-black uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
+                      {language === "EN" ? "Service Keywords" : "Kata Kunci Layanan"}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {cp.kata_kunci_layanan?.length > 0 ? (
+                      cp.kata_kunci_layanan.map((kw: string, i: number) => (
+                        <span key={i} className="px-3 py-1.5 rounded-lg text-xs font-bold border" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }}>
+                          {kw}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm italic" style={{ color: "var(--text-muted)" }}>-</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="p-4 sm:p-5 rounded-2xl border" style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border-primary)" }}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Globe size={16} style={{ color: "var(--text-muted)" }} />
+                      <span className="text-xs font-black uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
+                        {language === "EN" ? "Operation Areas" : "Wilayah Operasi"}
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                      {cp.wilayah_operasi?.join(", ") || <span className="italic text-[var(--text-muted)]">-</span>}
+                    </p>
+                  </div>
+
+                  <div className="p-4 sm:p-5 rounded-2xl border" style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border-primary)" }}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Tag size={16} style={{ color: "var(--text-muted)" }} />
+                      <span className="text-xs font-black uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
+                        {language === "EN" ? "Max Contract Value" : "Nilai Kontrak Maksimal"}
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                      {cp.nilai_proyek_max 
+                        ? new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(cp.nilai_proyek_max)
+                        : <span className="italic text-[var(--text-muted)]">-</span>
+                      }
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 sm:p-5 rounded-2xl border" style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border-primary)" }}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Tag size={16} style={{ color: "var(--text-muted)" }} />
+                    <span className="text-xs font-black uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
+                      {language === "EN" ? "KBLI & SBU" : "KBLI & SBU"}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {[...(cp.kode_kbli || []), ...(cp.bidang_usaha || [])].map((item: string, i: number) => (
+                      <span key={i} className="px-3 py-1.5 rounded-lg text-xs font-bold border" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }}>
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            )}
           </div>
         </div>
       </div>

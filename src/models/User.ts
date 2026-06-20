@@ -12,6 +12,34 @@ const UserSchema = new mongoose.Schema({
   // Lokasi untuk personalisasi wilayah
   kota: { type: String, default: "" },
   provinsi: { type: String, default: "" },
+  
+  // Data Hasil Ekstraksi PDF Company Profile (Opsional / Doping Algoritma)
+  company_profile: {
+    nama_perusahaan: { type: String, default: "" },
+    bidang_usaha: { type: [String], default: [] },
+    sub_bidang: { type: [String], default: [] },
+    kode_kbli: { type: [String], default: [] },
+    kode_sbu: { type: [String], default: [] },
+    kualifikasi: { type: String, default: "" },
+    domisili: {
+      kota: { type: String, default: "" },
+      provinsi: { type: String, default: "" }
+    },
+    wilayah_operasi: { type: [String], default: [] },
+    pengalaman_proyek: [{
+      nama_proyek: String,
+      pemberi_kerja: String,
+      nilai_kontrak: Number,
+      tahun: String
+    }],
+    nilai_proyek_max: { type: Number, default: 0 },
+    sertifikasi: { type: [String], default: [] },
+    kata_kunci_layanan: { type: [String], default: [] },
+    tenaga_ahli: { type: [String], default: [] },
+    tahun_berdiri: { type: String, default: "" },
+    pdf_url: { type: String, default: "" }
+  },
+
   // Riwayat keyword pencarian (maksimal 20 terakhir)
   search_history: { type: [String], default: [] },
   session_token: { type: String, default: "" },

@@ -3,10 +3,12 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowUp, Pin, X, Filter, Package, Briefcase, User, Bell, Sparkles, CalendarClock, Trophy, ChevronDown, ChevronUp, TrendingUp, Tag } from "lucide-react";
+import { ArrowUp, Pin, X, Filter, Package, Briefcase, User, Bell, Sparkles, CalendarClock, Trophy, ChevronDown, ChevronUp, TrendingUp, Tag, Search, Plus } from "lucide-react";
 import { SearchResultItem } from "@/types";
 import { useDashboard } from "./DashboardContext";
 import ProductCard from "@/components/common/ProductCard";
+import { KOTA_PROVINSI_MAP } from "@/lib/geoMap";
+import { LocationDropdown, KOTA_INDONESIA, PROVINSI_INDONESIA } from "@/components/common/LocationDropdown";
 
 import { Suspense } from "react";
 
@@ -54,6 +56,13 @@ function DashboardContent() {
   const [filterYear, setFilterYear] = useState("");
 
   const [lpseSources, setLpseSources] = useState<string[]>([]);
+
+  // State untuk fitur "Mencoba untuk wilayah lain?"
+  const [isExtraRegionModalOpen, setIsExtraRegionModalOpen] = useState(false);
+  const [extraRegionInput, setExtraRegionInput] = useState("");
+  const [extraRegions, setExtraRegions] = useState<string[]>([]);
+  const [extraRegionResults, setExtraRegionResults] = useState<SearchResultItem[]>([]);
+  const [isFetchingExtra, setIsFetchingExtra] = useState(false);
 
   useEffect(() => {
     fetch("/api/lpse-sources")
@@ -225,6 +234,35 @@ function DashboardContent() {
   const handleKeywordSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     await runSearch(keyword, false);
+  };
+
+  const fetchExtraRegions = async () => {
+    if (!user || extraRegions.length === 0) return;
+    setIsFetchingExtra(true);
+    setExtraRegionResults([]);
+    try {
+      const res = await fetch("/api/keyword-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keyword,
+          bidang: selectedBidang,
+          filterWilayah,
+          filterTipe,
+          filterStatus,
+          offset: 0,
+          userId: user.id,
+          extraRegions
+        })
+      });
+      const data = await res.json();
+      setExtraRegionResults(data.items || []);
+      setIsExtraRegionModalOpen(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsFetchingExtra(false);
+    }
   };
 
   const filteredResults =
@@ -751,13 +789,64 @@ function DashboardContent() {
                   {isLoadingMore ? (language === 'EN' ? "Loading..." : "Sedang Memuat...") : (language === 'EN' ? "Load More" : "Muat Lainnya")}
                 </button>
               ) : (
-                <div
-                  className="px-6 py-3 rounded-xl font-medium text-sm sm:text-base border"
-                  style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border-subtle)", color: "var(--text-muted)" }}
-                >
-                  {language === 'EN' ? "All Data Displayed" : "Semua Data Ditampilkan"}
+                <div className="flex flex-col items-center gap-4">
+                  <div
+                    className="px-6 py-3 rounded-xl font-medium text-sm sm:text-base border"
+                    style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border-subtle)", color: "var(--text-muted)" }}
+                  >
+                    {language === 'EN' ? "All Data Displayed" : "Semua Data Ditampilkan"}
+                  </div>
+                  <button
+                    onClick={() => setIsExtraRegionModalOpen(true)}
+                    className="px-6 py-3 rounded-xl font-semibold hover:opacity-80 transition-all text-sm sm:text-base border border-blue-200 text-blue-600 bg-blue-50 flex items-center gap-2"
+                  >
+                    <Search size={16} /> Mencoba untuk wilayah lain?
+                  </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ── Extra Region Results ── */}
+          {extraRegionResults.length > 0 && (
+            <div className="mt-12 pt-8 border-t border-slate-200">
+              <h3 className="text-lg sm:text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+                <Search size={20} className="text-blue-500" />
+                Tender wilayah yang Anda cari
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                {extraRegionResults.map((p) => {
+                  const isSelesai = p.status === "selesai" || p.status === "menang" || p.status === "batal" || p.status === "gagal" || (p.tahap_saat_ini && /selesai|batal|gagal|penunjukan|sppbj|penandatanganan|kontrak/i.test(p.tahap_saat_ini));
+                  return (
+                    <ProductCard
+                      key={p.id}
+                      item={p}
+                      language={language}
+                      isPinned={isItemPinned(p)}
+                      onTogglePin={togglePin}
+                      showRemoveMode={false}
+                      customBadge={(() => {
+                        const isMenangSelesai = p.status === "selesai" || p.status === "menang" || (p.tahap_saat_ini && /selesai|penunjukan|sppbj|penandatanganan|kontrak/i.test(p.tahap_saat_ini));
+                        if (!isMenangSelesai) return null;
+                        return (
+                          <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                            {p.pemenang_nama && (
+                              <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-green-600 text-white shadow-sm flex items-center gap-1 max-w-[140px] truncate" title={`Pemenang: ${p.pemenang_nama}`}>
+                                <Trophy className="w-2.5 h-2.5 shrink-0 text-yellow-300" /> <span className="truncate">{p.pemenang_nama}</span>
+                              </span>
+                            )}
+                            {!p.pemenang_nama && isMenangSelesai && (
+                              <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-green-100 text-green-700 border border-green-200 shrink-0">
+                                Selesai
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    />
+                  );
+                })}
+              </div>
             </div>
           )}
         </motion.div>
@@ -780,6 +869,108 @@ function DashboardContent() {
           </motion.button>
         )}
       </AnimatePresence>
+
+      {/* --- EXTRA REGION MODAL --- */}
+      <AnimatePresence>
+        {isExtraRegionModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col border border-slate-200"
+            >
+              <div className="p-5 border-b flex items-center justify-between bg-slate-50">
+                <h3 className="font-bold text-slate-800 text-lg">Preferensi Wilayah Tambahan</h3>
+                <button
+                  onClick={() => setIsExtraRegionModalOpen(false)}
+                  className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="p-5 flex flex-col gap-4">
+                <p className="text-sm text-slate-600">
+                  Tambahkan wilayah lain yang ingin Anda lihat tendernya. Wilayah ini tidak akan tercampur dengan hasil utama.
+                </p>
+                
+                <div className="flex flex-col sm:flex-row items-stretch gap-3 relative">
+                  <div className="flex-1">
+                    <LocationDropdown
+                      value={extraRegionInput}
+                      onChange={(val) => {
+                        setExtraRegionInput(val);
+                        // If they pick something from the dropdown, we auto-add it
+                        if (val && !extraRegions.includes(val)) {
+                          setExtraRegions([...extraRegions, val]);
+                          // Small delay to clear the input after adding
+                          setTimeout(() => setExtraRegionInput(""), 50);
+                        }
+                      }}
+                      options={[...KOTA_INDONESIA, ...PROVINSI_INDONESIA].sort()}
+                      placeholder="Cari Kota / Provinsi (misal: Jakarta)"
+                      label="wilayah"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (extraRegionInput.trim() && !extraRegions.includes(extraRegionInput.trim())) {
+                        setExtraRegions([...extraRegions, extraRegionInput.trim()]);
+                      }
+                      setExtraRegionInput("");
+                    }}
+                    className="px-4 py-3 bg-[var(--accent)] text-white font-bold rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shrink-0 shadow-md"
+                  >
+                    <Plus size={18} strokeWidth={2.5} />
+                    <span className="sm:hidden">Tambah</span>
+                  </button>
+                </div>
+                
+                {extraRegions.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {extraRegions.map((w, idx) => (
+                      <span key={idx} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-sm font-medium text-slate-700">
+                        {w}
+                        <button
+                          onClick={() => setExtraRegions(extraRegions.filter(item => item !== w))}
+                          className="hover:text-red-500"
+                        >
+                          <X size={14} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              <div className="p-4 border-t bg-slate-50 flex justify-end gap-3">
+                <button
+                  onClick={() => setIsExtraRegionModalOpen(false)}
+                  className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={fetchExtraRegions}
+                  disabled={extraRegions.length === 0 || isFetchingExtra}
+                  className="px-5 py-2 text-sm font-bold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isFetchingExtra ? <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Search size={16} />}
+                  Cari Tender
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </main>
   );
 }

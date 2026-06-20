@@ -29,7 +29,7 @@ const MONGO_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/seleno_d
 const BASE_DOMAIN = "https://spse.inaproc.id";
 const PAGES_PER_LPSE = 3;           // Halaman tabel per LPSE (25 paket/halaman)
 const PAGE_WAIT_MS = 4000;          // Tunggu setelah load halaman (Next.js butuh lebih lama)
-const BROWSER_CONCURRENCY = 3;      // Berapa browser paralel (hati-hati RAM)
+const BROWSER_CONCURRENCY = 1;      // Diubah ke 1 agar tidak membuat RAM server meledak & Next.js tetap lancar
 const NAV_TIMEOUT = 45000;          // Dinaikkan dari 25s → 45s untuk Next.js SSR
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -153,15 +153,22 @@ function classifyPaket(nama) {
   return { tag: "Lainnya" };
 }
 
-async function classifyWithAIBatch(packages) {
-  if (!packages || packages.length === 0) return {};
-  
-  const apiKeys = [
-    process.env.OPENROUTER_SCRAPER_API_KEY,
-    process.env.OPENROUTER_FALLBACK_API_KEY
-  ].filter(Boolean);
+const aiCategoryCache = new Map();
 
-  if (apiKeys.length === 0) return packages.reduce((acc, p) => ({...acc, [p]: "Lainnya"}), {});
+async function classifyWithAIBatch(packages) {
+  // Hanya ambil paket yang belum ada di cache
+  const packagesToClassify = packages.filter(p => !aiCategoryCache.has(p));
+  
+  // Jika semua sudah di cache, langsung kembalikan dari cache
+  if (packagesToClassify.length === 0) {
+    return packages.reduce((acc, p) => ({...acc, [p]: aiCategoryCache.get(p)}), {});
+  }
+  
+  if (!packagesToClassify || packagesToClassify.length === 0) return {};
+  
+  const apiKey = process.env.GEMINI_SCRAPER_KEY || process.env.GEMINI_API_KEY;
+
+  if (!apiKey) return packages.reduce((acc, p) => ({...acc, [p]: "Lainnya"}), {});
 
   const prompt = `Tugas Anda mengklasifikasikan judul tender ke dalam HANYA salah satu kategori berikut: Teknologi, Konstruksi, Kesehatan, Pangan, Konsultansi, Pendidikan, Otomotif, Logistik, Jasa Umum. Jika sama sekali tidak masuk, kembalikan "Lainnya".
 
@@ -170,57 +177,52 @@ ${JSON.stringify(packages)}
 
 KEMBALIKAN HANYA SEBUAH OBJEK JSON (tanpa backticks, tanpa format markdown, tanpa penjelasan apa pun) dengan judul sebagai key dan kategori sebagai value. Contoh: {"Pengadaan laptop ASUS": "Teknologi"}`;
 
-  const models = [
-    "google/gemini-2.0-flash-exp:free",
-    "meta-llama/llama-3.1-8b-instruct:free",
-    "nousresearch/hermes-3-llama-3.1-405b:free"
-  ];
-
   try {
-    let keyIndex = 0;
-    let modelIndex = 0;
-    // Retry fetch if rate limited (max 6 times)
-    for (let attempt = 1; attempt <= 6; attempt++) {
-      const apiKey = apiKeys[keyIndex % apiKeys.length];
-      const model = models[modelIndex % models.length];
-      
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: model, 
-          messages: [{ role: "user", content: prompt }]
+          contents: [{ parts: [{ text: prompt }] }]
         })
       });
 
       if (response.status === 429) {
-        console.log(`[AI] Rate limit terkena (Key: ${keyIndex % apiKeys.length}, Model: ${model}). Ganti API Key/Model dan tunggu 15 detik...`);
-        keyIndex++;
-        modelIndex++; // Ganti model juga agar tidak nyangkut di provider yang sama
+        console.log(`[AI] Rate limit terkena (Gemini API). Tunggu 15 detik...`);
         await new Promise(r => setTimeout(r, 15000));
         continue;
       }
 
       const data = await response.json();
-      if (!data || !data.choices || !data.choices[0]) {
-        console.error(`[AI] OpenRouter Error pada model ${model} (Attempt ${attempt}):`, JSON.stringify(data));
-        // Jika error provider (bukan rate limit), coba ganti model
-        modelIndex++;
-        await new Promise(r => setTimeout(r, 1000));
+      if (!data || !data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+        console.error(`[AI] Gemini API Error (Attempt ${attempt}):`, JSON.stringify(data));
+        await new Promise(r => setTimeout(r, 2000));
         continue;
       }
       
-      let text = data.choices[0].message.content.trim();
+      let text = data.candidates[0].content.parts[0].text.trim();
       text = text.replace(/^```json/i, "").replace(/^```/i, "").replace(/```$/i, "").trim();
-      return JSON.parse(text);
+      
+      const results = JSON.parse(text);
+      
+      // Simpan ke cache
+      for (const [key, value] of Object.entries(results)) {
+        aiCategoryCache.set(key, value);
+      }
+      
+      // Gabungkan dengan hasil dari cache untuk paket yang tidak di-fetch ulang
+      return packages.reduce((acc, p) => ({
+        ...acc, 
+        [p]: aiCategoryCache.get(p) || results[p] || "Lainnya"
+      }), {});
+      
     }
-    throw new Error("Rate limit exceeded after retries on all keys");
+    throw new Error("Rate limit exceeded after retries");
   } catch (err) {
     console.log("[AI] Gagal klasifikasi:", err.message);
-    return packages.reduce((acc, p) => ({...acc, [p]: "Lainnya"}), {});
+    return packages.reduce((acc, p) => ({...acc, [p]: aiCategoryCache.get(p) || "Lainnya"}), {});
   }
 }
 
@@ -370,7 +372,7 @@ async function scrapeBatch(batch, progressObj) {
     headless: true,
     ignoreHTTPSErrors: true,
     protocolTimeout: 120000,
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--ignore-certificate-errors", "--disable-web-security"],
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--ignore-certificate-errors", "--disable-web-security", "--disable-gpu", "--disable-software-rasterizer"],
   });
   try {
     for (const lpse of batch) {
@@ -379,24 +381,41 @@ async function scrapeBatch(batch, progressObj) {
 
       // AI Fallback Logic
       const lainnyaItems = items.filter(i => i.tag === "Lainnya");
-      const apiKey = process.env.OPENROUTER_SCRAPER_API_KEY || process.env.OPENROUTER_API_KEY;
+      const apiKey = process.env.GEMINI_SCRAPER_KEY || process.env.GEMINI_API_KEY;
       if (lainnyaItems.length > 0 && apiKey) {
-        console.log(`[AI] ${lpse.nama}: Memanggil OpenRouter untuk ${lainnyaItems.length} item 'Lainnya'...`);
-        const packageNames = lainnyaItems.map(i => i.nama_paket);
+        // Filter nama paket unik untuk diproses
+        const packageNames = [...new Set(lainnyaItems.map(i => i.nama_paket))];
+        const uncachedCount = packageNames.filter(p => !aiCategoryCache.has(p)).length;
         
-        const CHUNK_SIZE = 50;
+        if (uncachedCount > 0) {
+          console.log(`[AI] ${lpse.nama}: Memanggil Gemini untuk ${uncachedCount} item baru ('Lainnya')...`);
+        }
+        
+        const CHUNK_SIZE = 150;
         for (let i = 0; i < packageNames.length; i += CHUNK_SIZE) {
           const chunk = packageNames.slice(i, i + CHUNK_SIZE);
-          const aiResults = await classifyWithAIBatch(chunk);
           
-          for (const item of lainnyaItems) {
-            if (aiResults[item.nama_paket] && aiResults[item.nama_paket] !== "Lainnya") {
-              item.tag = aiResults[item.nama_paket];
+          // Hanya panggil AI jika ada item di chunk yang belum di-cache
+          if (chunk.some(p => !aiCategoryCache.has(p))) {
+            const aiResults = await classifyWithAIBatch(chunk);
+            
+            for (const item of lainnyaItems) {
+              if (aiResults[item.nama_paket] && aiResults[item.nama_paket] !== "Lainnya") {
+                item.tag = aiResults[item.nama_paket];
+              }
             }
-          }
-          // Tambahkan jeda aman antar chunk untuk model gratis
-          if (i + CHUNK_SIZE < packageNames.length) {
-            await new Promise(r => setTimeout(r, 5000));
+            
+            // Tambahkan jeda yang lebih lama antar chunk untuk model gratis
+            if (i + CHUNK_SIZE < packageNames.length) {
+              await new Promise(r => setTimeout(r, 10000));
+            }
+          } else {
+             // Jika semua sudah di cache, langsung update tag
+             for (const item of lainnyaItems) {
+               if (aiCategoryCache.has(item.nama_paket) && aiCategoryCache.get(item.nama_paket) !== "Lainnya") {
+                 item.tag = aiCategoryCache.get(item.nama_paket);
+               }
+             }
           }
         }
       }
@@ -451,7 +470,7 @@ agenda.define("sync jadwal aktif", async () => {
   let browser;
   const launchBrowser = async () => {
     if (browser) await browser.close().catch(() => {});
-    return await puppeteer.launch({ headless: true, protocolTimeout: 120000, ignoreHTTPSErrors: true, args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"] });
+    return await puppeteer.launch({ headless: true, protocolTimeout: 120000, ignoreHTTPSErrors: true, args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--disable-software-rasterizer"] });
   };
   
   browser = await launchBrowser();

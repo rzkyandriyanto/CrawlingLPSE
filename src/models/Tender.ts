@@ -39,7 +39,7 @@ const TenderSchema = new mongoose.Schema({
   archived_by: { type: String, default: null }, // userId yang mengarsipkan
   is_deleted: { type: Boolean, default: false, index: true }, // Soft delete flag untuk keperluan analisis
 
-}, { timestamps: true });
+}, { timestamps: true, strict: false });
 
 
 export const TenderModel = mongoose.models?.Tender || mongoose.model("Tender", TenderSchema);
