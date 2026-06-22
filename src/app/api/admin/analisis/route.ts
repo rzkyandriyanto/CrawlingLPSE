@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/mongoose";
 import { TenderModel } from "@/models/Tender";
 import { UserModel } from "@/models/User";
+import { ReviewModel } from "@/models/Review";
 
 export async function GET(req: NextRequest) {
   try {
@@ -40,7 +41,8 @@ export async function GET(req: NextRequest) {
       topInstansi,
       topKategori,
       avgPagu,
-      tipeBreakdown
+      tipeBreakdown,
+      ratingsAggregate
     ] = await Promise.all([
       // Total data
       TenderModel.countDocuments(baseQuery),
@@ -85,6 +87,12 @@ export async function GET(req: NextRequest) {
           }
         },
         { $group: { _id: { $cond: ["$isBarang", "Barang", "Jasa"] }, count: { $sum: 1 } } }
+      ]),
+
+      // Aggregate all ratings from ReviewModel
+      ReviewModel.aggregate([
+        { $match: { rating: { $exists: true, $ne: null } } },
+        { $group: { _id: "$itemId", avgRating: { $avg: "$rating" } } }
       ])
     ]);
 
@@ -127,6 +135,25 @@ export async function GET(req: NextRequest) {
         .reduce((acc: number, s: any) => acc + s.count, 0),
       topKeywords: topKeywords,
     };
+
+    // Calculate overall average rating and map it per tender
+    const ratingMap: Record<string, number> = {};
+    let totalRatingSum = 0;
+    let ratedTendersCount = 0;
+    
+    if (ratingsAggregate && Array.isArray(ratingsAggregate)) {
+      for (const r of ratingsAggregate) {
+        if (r._id && r.avgRating) {
+          ratingMap[r._id] = r.avgRating;
+          totalRatingSum += r.avgRating;
+          ratedTendersCount++;
+        }
+      }
+    }
+    
+    // Add to insights
+    (insights as any).avgRatingOverall = ratedTendersCount > 0 ? (totalRatingSum / ratedTendersCount) : 0;
+    (insights as any).totalRatedTenders = ratedTendersCount;
 
     // ── 2. Daftar data untuk tabel (max 2500) ──
     const tenders = await TenderModel.find(baseQuery)
@@ -190,6 +217,7 @@ export async function GET(req: NextRequest) {
         pemenang_harga: t.pemenang_harga || null,
         pemenang_harga_num: t.pemenang_harga ? parsePagu(t.pemenang_harga) : 0,
         peserta_evaluasi: t.peserta_evaluasi || null,
+        rating: ratingMap[t.lelangId || t._id.toString()] || 0, // Ambil rating dari map
       };
     });
 

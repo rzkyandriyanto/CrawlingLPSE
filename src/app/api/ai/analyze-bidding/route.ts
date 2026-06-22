@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { askAI, MODELS } from "@/lib/openrouter";
+import connectToDatabase from "@/lib/mongoose";
+import { TenderModel } from "@/models/Tender";
 
 /**
  * POST /api/ai/analyze-bidding
@@ -16,10 +18,22 @@ import { askAI, MODELS } from "@/lib/openrouter";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { nama_paket, pagu, hps, pemenang_nama, pemenang_harga, peserta } = body;
+    const { lelangId, nama_paket, pagu, hps, pemenang_nama, pemenang_harga, peserta } = body;
 
     if (!nama_paket || !peserta || peserta.length === 0) {
       return NextResponse.json({ error: "Data peserta diperlukan" }, { status: 400 });
+    }
+
+    // ── Cek Cache di Database ──
+    if (lelangId) {
+      await connectToDatabase();
+      const tender = await TenderModel.findOne({ lelangId });
+      
+      // Jika cache valid (ada analisis dan panjang string > 100 karakter)
+      if (tender && tender.analysis_bidding && JSON.stringify(tender.analysis_bidding).length > 100) {
+        console.log(`[analyze-bidding] Mengembalikan cache untuk lelangId: ${lelangId}`);
+        return NextResponse.json({ analysis: tender.analysis_bidding });
+      }
     }
 
     const fmt = (num: number) =>
@@ -117,6 +131,20 @@ Jawab dalam format JSON MURNI (tanpa pengantar, tanpa markdown code block):
       if (match) analysis = JSON.parse(match[0]);
     } catch {
       analysis = { ringkasan: aiText };
+    }
+
+    // ── Simpan Hasil ke Database ──
+    if (lelangId && analysis) {
+      await connectToDatabase();
+      await TenderModel.updateOne(
+        { lelangId },
+        { 
+          $set: { 
+            analysis_bidding: analysis,
+            analysis_cached_at: new Date()
+          } 
+        }
+      );
     }
 
     return NextResponse.json({ analysis });

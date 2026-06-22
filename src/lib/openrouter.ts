@@ -45,31 +45,45 @@ export async function callOpenRouter(options: OpenRouterOptions): Promise<Respon
     throw new Error("OPENROUTER_CHAT_API_KEY atau OPENROUTER_API_KEY tidak ditemukan di environment variables.");
   }
 
-  const res = await fetch(OPENROUTER_BASE, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
-      "X-Title": "Tender Monitor - Kerja Praktik",
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      stream,
-      max_tokens: maxTokens,
-      temperature,
-      ...(tools && tools.length > 0 ? { tools } : {}),
-      ...(tool_choice ? { tool_choice } : {}),
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // Timeout 30 detik
 
-  if (!res.ok && !stream) {
-    const errText = await res.text();
-    throw new Error(`OpenRouter error ${res.status}: ${errText}`);
+  try {
+    const res = await fetch(OPENROUTER_BASE, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+        "X-Title": "Tender Monitor - Kerja Praktik",
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        stream,
+        max_tokens: maxTokens,
+        temperature,
+        ...(tools && tools.length > 0 ? { tools } : {}),
+        ...(tool_choice ? { tool_choice } : {}),
+      }),
+      signal: controller.signal, // Meneruskan signal dari AbortController
+    });
+
+    clearTimeout(timeoutId); // Bersihkan timeout jika berhasil sebelum 30 detik
+
+    if (!res.ok && !stream) {
+      const errText = await res.text();
+      throw new Error(`OpenRouter error ${res.status}: ${errText}`);
+    }
+
+    return res;
+  } catch (error: any) {
+    clearTimeout(timeoutId); // Pastikan timeout dibersihkan jika terjadi error
+    if (error.name === 'AbortError') {
+      throw new Error("Analisis memakan waktu terlalu lama, silakan coba lagi");
+    }
+    throw error;
   }
-
-  return res;
 }
 
 /**

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Search, Loader2, Package, Download, RefreshCw, TrendingUp, Building2, Tag, Banknote, BarChart3, AlertTriangle } from "lucide-react";
+import { Search, Loader2, Package, Download, RefreshCw, TrendingUp, Building2, Tag, Banknote, BarChart3, AlertTriangle, Star } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   PieChart, Pie, Cell, Legend, ComposedChart, Line, Area
@@ -16,6 +16,8 @@ interface InsightData {
   avgPagu: number;
   totalNilai: number;
   tipeBreakdown?: { barang: number; jasa: number };
+  avgRatingOverall?: number;
+  totalRatedTenders?: number;
 }
 
 interface AnalisisData {
@@ -39,6 +41,7 @@ interface AnalisisData {
   updated_at: string;
   durasi_hari?: number | null;
   jumlah_reschedule?: number;
+  rating?: number;
 }
 
 function formatRupiah(num: number): string {
@@ -238,7 +241,7 @@ export default function AdminAnalisisPage() {
         <>
           {/* ── KPI Cards ── */}
           {insights && (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="p-2 bg-slate-100 rounded-xl"><BarChart3 size={18} className="text-slate-600" /></div>
@@ -289,6 +292,20 @@ export default function AdminAnalisisPage() {
                     </>
                   );
                 })()}
+              </div>
+
+              {/* Rata-rata Rating Card */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-indigo-50 rounded-xl"><Star className="text-indigo-600 w-4 h-4" /></div>
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Rating User</span>
+                </div>
+                <div className="text-3xl font-black text-slate-900 flex items-center gap-2">
+                  {insights.avgRatingOverall ? insights.avgRatingOverall.toFixed(1) : "0.0"} <Star className="w-5 h-5 text-amber-400 fill-amber-400" />
+                </div>
+                <div className="text-xs text-slate-400 font-medium mt-1">
+                  dari {insights.totalRatedTenders || 0} tender dinilai
+                </div>
               </div>
             </div>
           )}
@@ -490,6 +507,7 @@ export default function AdminAnalisisPage() {
                       <th className="py-3 px-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 whitespace-nowrap">Nilai HPS</th>
                       <th className="py-3 px-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 text-center">Durasi</th>
                       <th className="py-3 px-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 text-center">Reschedule</th>
+                      <th className="py-3 px-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 text-center">Rating</th>
                       <th className="py-3 px-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 text-center">Status</th>
                     </tr>
                   </thead>
@@ -529,6 +547,15 @@ export default function AdminAnalisisPage() {
                           <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${item.jumlah_reschedule && item.jumlah_reschedule > 0 ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-500"}`}>
                             {item.jumlah_reschedule || 0}x
                           </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          {item.rating && item.rating > 0 ? (
+                            <div className="flex items-center justify-center gap-1 font-bold text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">
+                              {item.rating} <Star className="w-3 h-3 fill-amber-500" />
+                            </div>
+                          ) : (
+                            <span className="text-slate-300 text-xs">-</span>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-center">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${STATUS_STYLE[item.status] || "bg-slate-100 text-slate-600"}`}>

@@ -41,6 +41,11 @@ export default function LoginPage() {
       toast.success("Login berhasil!");
       localStorage.setItem("currentUser", JSON.stringify(user));
       
+      if (user.role === "admin") {
+        router.push("/admin");
+        return;
+      }
+      
       const tags = Array.isArray(user.tag)
         ? user.tag
         : typeof user.tag === "string" && user.tag.trim().startsWith("[")

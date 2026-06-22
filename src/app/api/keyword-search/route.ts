@@ -370,7 +370,7 @@ export async function POST(req: NextRequest) {
         kategori: row.kategori || "Pekerjaan Konstruksi",
         tag: row.tag || "Konstruksi",
         wilayah: row.wilayah || "Indonesia",
-        tanggal: row.tanggal_pembuatan || row.createdAt || "-",
+        tanggal: row.tanggal_pembuatan || "-",
         instansi: row.instansi,
         pagu: row.pagu || "Rp 0",
         hps: row.hps || "Rp 0",

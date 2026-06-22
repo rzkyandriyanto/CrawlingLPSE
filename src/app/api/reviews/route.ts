@@ -23,23 +23,31 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { itemId, itemType, userId, userName, userAvatar, rating, comment, parentId } = body;
+    const { itemId, itemType, userId, userName, userAvatar, rating, comment } = body;
     
-    if (!itemId || !userName || !comment) {
-      return NextResponse.json({ error: "Missing fields" }, { status: 400 });
-    }
-
-    if (!parentId && !rating) {
-      return NextResponse.json({ error: "Rating required for main review" }, { status: 400 });
+    if (!itemId || !rating) {
+      return NextResponse.json({ error: "Missing itemId or rating" }, { status: 400 });
     }
 
     await connectToDatabase();
     
-    const newReview = await ReviewModel.create({
-      itemId, itemType, userId, userName, userAvatar: userAvatar || null, rating: rating || 5, comment, parentId: parentId || null
-    });
+    // Upsert rating per user per item
+    // If guest (userId null), we can just create a new one, but to prevent spam,
+    // let's just allow it, or try to use IP, but we'll just create a new one for guests.
+    let review;
+    if (userId) {
+      review = await ReviewModel.findOneAndUpdate(
+        { itemId, userId },
+        { itemType, userName: userName || "User", userAvatar: userAvatar || null, rating, comment: comment || "" },
+        { new: true, upsert: true }
+      );
+    } else {
+      review = await ReviewModel.create({
+        itemId, itemType, userId, userName: userName || "Guest", userAvatar: userAvatar || null, rating, comment: comment || ""
+      });
+    }
     
-    return NextResponse.json({ review: newReview }, { status: 201 });
+    return NextResponse.json({ review }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

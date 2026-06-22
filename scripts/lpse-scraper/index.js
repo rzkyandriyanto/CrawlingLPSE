@@ -18,7 +18,8 @@ const mongoose = require("mongoose");
 const Agenda = require("agenda");
 const nodemailer = require("nodemailer");
 const { buildDailyDigestHtml } = require("./email-template");
-const { LPSE_LIST } = require("./lpse-list");
+// PERUBAHAN: Hapus import dari file statis lpse-list.js
+// Daftar LPSE sekarang dibaca langsung dari MongoDB collection "lpse_sources"
 
 puppeteer.use(StealthPlugin());
 
@@ -92,6 +93,18 @@ const TenderSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const TenderModel = mongoose.models?.Tender || mongoose.model("Tender", TenderSchema);
+
+// ── LpseSource Model: menyimpan daftar URL LPSE yang aktif ───────────────────
+// PERUBAHAN: Tambah schema baru untuk membaca URL LPSE dari database
+const LpseSourceSchema = new mongoose.Schema({
+  nama:          { type: String },          // Nama LPSE, contoh: "LPSE Provinsi Sumatera Utara"
+  url:           { type: String },          // URL LPSE, contoh: "https://spse.inaproc.id/sumutprov"
+  isActive:      { type: Boolean, default: true },  // Apakah LPSE ini aktif di-scrape
+  failCount:     { type: Number,  default: 0 },     // Jumlah kegagalan scraping berturut-turut
+  lastSuccessAt: { type: Date },            // Kapan terakhir berhasil di-scrape
+  lastFailAt:    { type: Date },            // Kapan terakhir gagal di-scrape
+});
+const LpseSourceModel = mongoose.models?.LpseSource || mongoose.model("LpseSource", LpseSourceSchema);
 
 // ── User Model (ringkas, hanya yang dibutuhkan) ──────────────────────────────
 const UserSchema = new mongoose.Schema({
@@ -269,7 +282,8 @@ async function scrapeSingleLpse(lpse, browser) {
       ? u.pathname.replace(/^\//, "").split("/")[0]
       : u.hostname.replace(".go.id", "").replace("lpse.", "").replace("spse.", "");
   } catch {
-    return [];
+    // URL tidak valid → dianggap error nyata, bukan tender kosong
+    return { items: [], scraperError: true };
   }
 
   const listUrl = `${BASE_DOMAIN}/${slug}/lelang`;
@@ -358,10 +372,36 @@ async function scrapeSingleLpse(lpse, browser) {
       }
     }
     await page.close();
+
+    // Halaman berhasil dimuat — kembalikan hasil scraping (meski kosong)
+    // scraperError = false artinya situs BISA diakses, tender mungkin memang sedang 0
+    return { items: collectedRows, scraperError: false };
+
   } catch (err) {
     process.stderr.write(`\n  ✗ ${lpse.nama}: ${err.message.substring(0, 80)}\n`);
+
+    // Ini adalah error nyata (timeout, crash browser, dll)
+    // scraperError = true → failCount akan bertambah di scrapeBatch
+    try {
+      await LpseSourceModel.updateOne(
+        { url: lpse.url },
+        {
+          $inc: { failCount: 1 },        // Tambah hitungan kegagalan
+          $set: { lastFailAt: new Date() } // Catat waktu kegagalan terakhir
+        }
+      );
+
+      // Auto-disable jika sudah gagal lebih dari 5 kali berturut-turut
+      await LpseSourceModel.updateOne(
+        { url: lpse.url, failCount: { $gt: 5 } },
+        { $set: { isActive: false } }
+      );
+    } catch (dbErr) {
+      console.error(`[DB] Gagal update failCount untuk ${lpse.url}:`, dbErr.message);
+    }
+
+    return { items: [], scraperError: true };
   }
-  return collectedRows;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -377,7 +417,9 @@ async function scrapeBatch(batch, progressObj) {
   try {
     for (const lpse of batch) {
       const startTime = Date.now();
-      const items = await scrapeSingleLpse(lpse, browser);
+      // PERUBAHAN: Sekarang scrapeSingleLpse mengembalikan { items, scraperError }
+      // bukan array langsung, agar bisa dibedakan kosong vs error
+      const { items, scraperError } = await scrapeSingleLpse(lpse, browser);
 
       // AI Fallback Logic
       const lainnyaItems = items.filter(i => i.tag === "Lainnya");
@@ -428,9 +470,46 @@ async function scrapeBatch(batch, progressObj) {
         progressObj.inserted += inserted;
         progressObj.updated += updated;
         console.log(`[✓] ${lpName} | +${String(inserted).padEnd(3, " ")} baru | ~${String(updated).padEnd(3, " ")} update | ${timeSec}s`);
+
+        // PERUBAHAN: Catat keberhasilan scraping dan reset failCount ke 0
+        try {
+          await LpseSourceModel.updateOne(
+            { url: lpse.url },
+            {
+              $set: {
+                lastSuccessAt: new Date(), // Catat waktu sukses terakhir
+                failCount: 0              // Reset hitungan kegagalan
+              }
+            }
+          );
+        } catch (dbErr) {
+          console.error(`[DB] Gagal update lastSuccessAt untuk ${lpse.url}:`, dbErr.message);
+        }
       } else {
-        progressObj.failed++;
-        console.log(`[!] ${lpName} | Kosong / Gagal             | ${timeSec}s`);
+        // PERUBAHAN: Bedakan "kosong" vs "error nyata"
+        if (scraperError) {
+          // Error nyata (timeout/crash) → failCount sudah di-increment di scrapeSingleLpse
+          progressObj.failed++;
+          console.log(`[✗] ${lpName} | Error / Gagal Load          | ${timeSec}s`);
+        } else {
+          // Halaman berhasil dimuat tapi tidak ada tender aktif → BUKAN kegagalan
+          // Anggap sebagai sukses (tidak ada tender yang perlu di-scrape)
+          console.log(`[~] ${lpName} | Tidak ada tender aktif      | ${timeSec}s`);
+          try {
+            // Reset failCount karena situs bisa diakses dengan baik
+            await LpseSourceModel.updateOne(
+              { url: lpse.url },
+              {
+                $set: {
+                  lastSuccessAt: new Date(), // Situs berhasil diakses
+                  failCount: 0              // Reset, situs tidak sedang down
+                }
+              }
+            );
+          } catch (dbErr) {
+            console.error(`[DB] Gagal update untuk ${lpse.url}:`, dbErr.message);
+          }
+        }
       }
     }
   } finally {
@@ -441,10 +520,26 @@ async function scrapeBatch(batch, progressObj) {
 // ════════════════════════════════════════════════════════════════
 // AGENDA JOBS
 // ════════════════════════════════════════════════════════════════
+// PERUBAHAN: Fungsi baru untuk mengambil daftar LPSE aktif dari database
+// Menggantikan fungsi lama yang membaca dari file statis lpse-list.js
+async function getActiveLpseList() {
+  const sources = await LpseSourceModel.find({ isActive: true }).lean();
+  if (sources.length === 0) {
+    console.error("❌ Tidak ada URL LPSE aktif di database.");
+    console.error("   Jalankan: npm run seed:lpse");
+    process.exit(0);
+  }
+  return sources;
+}
+
 agenda.define("scrape all lpse", async () => {
   const t0 = Date.now();
+
+  // PERUBAHAN: Ambil daftar LPSE aktif dari MongoDB, bukan dari file statis
+  const LPSE_LIST = await getActiveLpseList();
+
   console.log(`\n${"═".repeat(65)}`);
-  console.log(`📡  SCRAPE ${LPSE_LIST.length} LPSE SELURUH INDONESIA`);
+  console.log(`📡  SCRAPE ${LPSE_LIST.length} LPSE AKTIF (dari database)`);
   console.log(`    Parallel browsers: ${BROWSER_CONCURRENCY} | Halaman/LPSE: ${PAGES_PER_LPSE}`);
   console.log(`${"═".repeat(65)}`);
 
@@ -720,7 +815,9 @@ agenda.define("send daily digest", async () => {
 async function main() {
   console.log("━".repeat(65));
   console.log("🚀  LPSE SCRAPER — MULTI DAERAH INDONESIA v4 (DOM Scraping)");
-  console.log(`    Daftar: ${LPSE_LIST.length} LPSE | Browsers: ${BROWSER_CONCURRENCY}`);
+  // PERUBAHAN: Jumlah LPSE tidak bisa ditampilkan di sini karena baru dibaca
+  // dari MongoDB saat job "scrape all lpse" berjalan (lihat fungsi getActiveLpseList)
+  console.log(`    Sumber LPSE: MongoDB collection "lpse_sources" | Browsers: ${BROWSER_CONCURRENCY}`);
   console.log(`    Target: ${BASE_DOMAIN}/{slug}/lelang (Next.js SSR)`);
   console.log("━".repeat(65));
 

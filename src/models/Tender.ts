@@ -8,7 +8,7 @@ const TenderSchema = new mongoose.Schema({
   pagu: String,
   pagu_num: { type: Number, default: 0, index: true }, // Nilai numerik Pagu untuk agregasi BI
   hps_num: { type: Number, default: 0 },  // Nilai numerik HPS untuk agregasi BI
-  kategori: String,
+  kategori: { type: String, index: true }, // Menambahkan index pada kategori
   tag: String,
   metode_pengadaan: String,
   wilayah: String,
@@ -41,5 +41,10 @@ const TenderSchema = new mongoose.Schema({
 
 }, { timestamps: true, strict: false });
 
+// Menambahkan index untuk tanggalBerakhir (biasa)
+TenderSchema.index({ tanggalBerakhir: 1 });
+
+// Menambahkan text index untuk namaLpse dan judulTender untuk fitur pencarian
+TenderSchema.index({ namaLpse: "text", judulTender: "text" });
 
 export const TenderModel = mongoose.models?.Tender || mongoose.model("Tender", TenderSchema);

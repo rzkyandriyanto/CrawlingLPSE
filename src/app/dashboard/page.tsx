@@ -46,6 +46,8 @@ function DashboardContent() {
   const [hasMore, setHasMore] = useState(true);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [earlyStageTenders, setEarlyStageTenders] = useState<any[]>([]);
+  const [earlyStagePage, setEarlyStagePage] = useState(1);
+  const earlyStageItemsPerPage = 6;
   const [lpseStats, setLpseStats] = useState<{name: string, count: number}[]>([]);
   const [topKeywords, setTopKeywords] = useState<string[]>(TRENDING_KEYWORDS);
 
@@ -701,20 +703,22 @@ function DashboardContent() {
             <div className="mt-6 sm:mt-10 mb-8 p-4 sm:p-6 bg-slate-50 border border-blue-100 rounded-2xl relative overflow-hidden shadow-sm">
               <div className="absolute top-0 right-0 w-64 h-64 bg-blue-400 opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
               
-              <div className="flex items-center gap-2.5 mb-5 relative z-10">
-                <div className="p-1.5 sm:p-2 rounded-lg border bg-blue-100 border-blue-200">
-                  <Sparkles size={16} className="text-blue-600" />
-                </div>
-                <div>
-                  <h2 className="text-lg sm:text-xl font-black text-slate-800 tracking-tight leading-tight">
-                    {language === 'EN' ? 'New/Early Stage Tenders' : 'Tender Tahap Awal'} {filterTipe !== 'Semua' && filterTipe !== '' ? filterTipe : ''}
-                  </h2>
-                  <p className="text-[11px] text-slate-500 font-medium">Peluang terbaru yang sedang dalam masa pendaftaran / pengumuman.</p>
+              <div className="flex items-center justify-between mb-5 relative z-10">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 sm:p-2 rounded-lg border bg-blue-100 border-blue-200">
+                    <Sparkles size={16} className="text-blue-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg sm:text-xl font-black text-slate-800 tracking-tight leading-tight">
+                      {language === 'EN' ? 'New/Early Stage Tenders' : 'Tender Tahap Awal'} {filterTipe !== 'Semua' && filterTipe !== '' ? filterTipe : ''}
+                    </h2>
+                    <p className="text-[11px] text-slate-500 font-medium">Peluang terbaru yang sedang dalam masa pendaftaran / pengumuman.</p>
+                  </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 relative z-10">
-                {earlyStageTenders.map((t: any, idx: number) => (
+                {earlyStageTenders.slice((earlyStagePage - 1) * earlyStageItemsPerPage, earlyStagePage * earlyStageItemsPerPage).map((t: any, idx: number) => (
                   <ProductCard
                     key={t.id || idx}
                     item={t}
@@ -725,6 +729,29 @@ function DashboardContent() {
                   />
                 ))}
               </div>
+
+              {/* Pagination Controls */}
+              {earlyStageTenders.length > earlyStageItemsPerPage && (
+                <div className="mt-6 flex items-center justify-center gap-4 relative z-10">
+                  <button
+                    onClick={() => setEarlyStagePage(Math.max(1, earlyStagePage - 1))}
+                    disabled={earlyStagePage === 1}
+                    className="px-4 py-2 text-sm font-semibold border rounded-lg bg-white disabled:opacity-50 transition-colors hover:bg-slate-50"
+                  >
+                    {language === 'EN' ? 'Previous' : 'Sebelumnya'}
+                  </button>
+                  <span className="text-sm font-bold text-slate-700">
+                    {earlyStagePage} / {Math.ceil(earlyStageTenders.length / earlyStageItemsPerPage)}
+                  </span>
+                  <button
+                    onClick={() => setEarlyStagePage(Math.min(Math.ceil(earlyStageTenders.length / earlyStageItemsPerPage), earlyStagePage + 1))}
+                    disabled={earlyStagePage === Math.ceil(earlyStageTenders.length / earlyStageItemsPerPage)}
+                    className="px-4 py-2 text-sm font-semibold border rounded-lg bg-white disabled:opacity-50 transition-colors hover:bg-slate-50"
+                  >
+                    {language === 'EN' ? 'Next' : 'Selanjutnya'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

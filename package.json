@@ -6,6 +6,7 @@
     "dev": "concurrently -n \"Next.js,Scraper\" -c \"blue,green\" \"next dev\" \"node scripts/lpse-scraper/index.js\"",
     "dev:next": "next dev",
     "dev:scraper": "node scripts/lpse-scraper/index.js",
+    "seed:lpse": "node scripts/lpse-scraper/seed-lpse.js",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
