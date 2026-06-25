@@ -28,51 +28,60 @@ function calcRelevanceScore(tender: any, userProfile: any): number {
       w.includes("nasional") || w.includes("indonesia") || w.includes("seluruh")
     );
 
-    let skor_wilayah = 30;
+    let skor_wilayah = 0; // Default irrelevant
     
     const explicitMatch = wilayahOps.some((wOp: string) => {
+      // Abaikan kata kunci catch-all saat mencari match eksplisit
       if (wOp === "nasional" || wOp === "indonesia" || wOp === "seluruh") return false;
       return tenderStr.includes(wOp) || wOp.split(/[,\s]+/).some((part: string) => part.length > 3 && tenderStr.includes(part));
     });
 
     if (explicitMatch) {
-      skor_wilayah = 100;
+      skor_wilayah = 65; // Prioritas utama wilayah
     } else if (isNasional) {
-      skor_wilayah = 70;
+      skor_wilayah = 50; 
+    } else if (wilayahOps.length === 0) {
+      skor_wilayah = 40; // Jika belum diisi, anggap netral
     }
 
-    let skor_bidang = 0;
+    let match_count = 0;
+
+    // Hitung kecocokan dari Bidang Usaha / KBLI / SBU
     const allBidang = [...(cp.bidang_usaha || []), ...(cp.kode_kbli || []), ...(cp.sub_bidang || [])];
     allBidang.forEach((b: string) => {
-      if (b.length > 2 && (kategori.toLowerCase().includes(b.toLowerCase()) || tagTender.toLowerCase().includes(b.toLowerCase()))) {
-        skor_bidang += 50;
+      if (b.length > 2 && (kategori.toLowerCase().includes(b.toLowerCase()) || tagTender.toLowerCase().includes(b.toLowerCase()) || namaPaket.includes(b.toLowerCase()))) {
+        match_count += 1;
       }
     });
-    skor_bidang = Math.min(skor_bidang, 100);
 
-    let skor_keyword = 0;
+    // Hitung kecocokan dari Kata Kunci Layanan
     if (cp.kata_kunci_layanan?.length > 0) {
       cp.kata_kunci_layanan.forEach((kw: string) => {
-        if (kw.length > 2 && namaPaket.includes(kw.toLowerCase())) skor_keyword += 50;
+        if (kw.length > 2 && (namaPaket.includes(kw.toLowerCase()) || tagTender.toLowerCase().includes(kw.toLowerCase()))) {
+          match_count += 1;
+        }
       });
     }
-    skor_keyword = Math.min(skor_keyword, 100);
 
-    let skor_nilai = 50;
+    // Semakin banyak keyword yang cocok, semakin bagus skornya
+    // Tapi poin wilayah tetap lebih besar dari satu atau dua keyword
+    const skor_keyword = Math.min(match_count * 15, 60);
+
+    // Skor Nilai (Pagu)
+    let skor_nilai = 0; 
     if (cp.nilai_proyek_max && cp.nilai_proyek_max > 0) {
       const paguNum = Number((tender.pagu || "0").replace(/Rp/gi, "").replace(/\./g, "").replace(/,/g, ".").replace(/[^0-9.]/g, ""));
-      if (paguNum > 0 && paguNum <= cp.nilai_proyek_max * 1.5) skor_nilai = 100;
-      else if (paguNum > 0) skor_nilai = 30;
+      if (paguNum > 0 && paguNum <= cp.nilai_proyek_max * 1.5) {
+        skor_nilai = 0; // Sesuai budget (netral)
+      } else if (paguNum > cp.nilai_proyek_max * 1.5) {
+        skor_nilai = -15; // Penalti karena over-budget
+      }
     }
 
-    const bonus_cp = Math.round(((skor_bidang * 0.40) + (skor_keyword * 0.35) + (skor_nilai * 0.25)) * 0.30);
+    let final_score = skor_wilayah + skor_keyword + skor_nilai;
     
-    let final_score = skor_wilayah + bonus_cp;
-    if (!explicitMatch && isNasional) {
-      final_score = Math.min(95, final_score);
-    }
-    
-    return Math.min(100, final_score);
+    // Pastikan tetap di rentang 0-100
+    return Math.max(0, Math.min(100, final_score));
   }
 
   // ══════════════════════════════════════════════════════
@@ -144,9 +153,11 @@ export async function GET(req: NextRequest) {
     // ── 1. TENDER BARU / REKOMENDASI (Ladang History) ────────────────────────
     // Mengambil dari 300 tender aktif terbaru tanpa peduli sinceDate,
     // agar inbox Notifikasi selalu terisi dengan tender yang cocok.
-    const newTenderDocs = await TenderModel.find(
-      { status: "aktif" }
-    ).sort({ createdAt: -1 }).limit(300).lean();
+    const newTenderDocs = await TenderModel.find({ 
+      status: "aktif",
+      nama_paket: { $not: /batal|gagal/i },
+      tahap_saat_ini: { $not: /batal|gagal/i }
+    }).sort({ createdAt: -1 }).limit(300).lean();
 
     const newTenders = newTenderDocs
       .map((t: any) => ({ ...t, score: calcRelevanceScore(t, userProfile) }))

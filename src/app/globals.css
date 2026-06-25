@@ -121,18 +121,20 @@ body {
 /* ============================================
    UTILITY CLASSES
    ============================================ */
-@utility transition-all {
-  transition-property: all;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 200ms;
-}
+@layer utilities {
+  .transition-all {
+    transition-property: all;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 200ms;
+  }
 
-@utility scale-105 {
-  transform: scale(1.05);
-}
+  .scale-105 {
+    transform: scale(1.05);
+  }
 
-@utility scale-95 {
-  transform: scale(0.95);
+  .scale-95 {
+    transform: scale(0.95);
+  }
 }
 
 /* Smooth scrollbar */

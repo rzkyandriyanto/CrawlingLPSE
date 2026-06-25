@@ -32,6 +32,38 @@ const formatDate = (dateString?: string) => {
   return dateString;
 };
 
+const getStageColorClasses = (stage?: string) => {
+  if (!stage) return "bg-slate-500 text-white border-transparent";
+  
+  const s = stage.toLowerCase();
+  
+  // Final / Selesai / Gagal / Batal
+  if (s.includes("selesai") || s.includes("kontrak") || s.includes("sppbj") || s.includes("penunjukan penyedia")) {
+    return "bg-emerald-500 text-white border-transparent";
+  }
+  if (s.includes("gagal") || s.includes("batal")) {
+    return "bg-rose-500 text-white border-transparent";
+  }
+  
+  // Hampir Selesai: Pengumuman pemenang, Masa sanggah, Penetapan
+  if (s.includes("pemenang") || s.includes("sanggah") || s.includes("penetapan")) {
+    return "bg-amber-500 text-white border-transparent";
+  }
+  
+  // Mid: Upload, Evaluasi, Pembuktian, Klarifikasi
+  if (s.includes("evaluasi") || s.includes("upload") || s.includes("pembuktian") || s.includes("klarifikasi") || s.includes("penawaran") || s.includes("kirim") || s.includes("pemasukan")) {
+    return "bg-blue-500 text-white border-transparent";
+  }
+  
+  // Early: Pengumuman, Pendaftaran, Download, Penjelasan
+  if (s.includes("pengumuman") || s.includes("daftar") || s.includes("download") || s.includes("penjelasan") || s.includes("prakualifikasi")) {
+    return "bg-purple-500 text-white border-transparent";
+  }
+
+  // Default fallback
+  return "bg-slate-500 text-white border-transparent";
+};
+
 export default function ProductCard({
   item,
   language,
@@ -131,6 +163,15 @@ export default function ProductCard({
           >
             {item.nama_produk}
           </h3>
+          {item.tahap_saat_ini && (
+            <div 
+              className="mt-1 text-xs font-medium truncate" 
+              style={{ color: "var(--text-muted)" }}
+              title={item.tahap_saat_ini}
+            >
+              {item.tahap_saat_ini}
+            </div>
+          )}
         </div>
 
         {/* Meta row */}
@@ -157,20 +198,22 @@ export default function ProductCard({
       </div>
 
       {/* Action Row */}
-      <div className="flex items-center justify-between gap-3 mt-4 pt-3 border-t" style={{ borderColor: "var(--border-subtle)" }}>
+      <div className="flex items-center justify-between gap-3 mt-4 pt-3 pb-1 border-t w-full" style={{ borderColor: "var(--border-subtle)" }}>
         {item.pagu ? (
           <span
-            className="text-xs font-bold px-2 py-1 rounded-lg"
+            className="text-xs font-bold px-2 py-1 rounded-lg flex-shrink-0"
             style={{ backgroundColor: "var(--green-subtle)", color: "var(--green-text)" }}
           >
             {item.pagu}
           </span>
         ) : (
-          <span className="text-[10px] italic text-slate-400">No Pagu</span>
+          <span className="text-[10px] italic text-slate-400 flex-shrink-0">No Pagu</span>
         )}
 
+
+
         <div
-          className="flex items-center gap-1.5"
+          className="flex items-center gap-1.5 flex-shrink-0 z-10"
           onClick={(e) => e.stopPropagation()}
         >
           {showRemoveMode ? (
@@ -222,6 +265,7 @@ export default function ProductCard({
           )}
         </div>
       </div>
+
     </motion.div>
   );
 }

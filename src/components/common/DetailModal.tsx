@@ -84,14 +84,7 @@ const formatDate = (dateString?: string) => {
   return dateString;
 };
 
-const DEFAULT_JADWAL = [
-  { tahap: "Pengumuman Prakualifikasi", mulai: "23 April 2026 13:00", sampai: "30 April 2026 10:00", perubahan: "Tidak Ada" },
-  { tahap: "Download Dokumen Kualifikasi", mulai: "23 April 2026 13:00", sampai: "30 April 2026 10:00", perubahan: "Tidak Ada" },
-  { tahap: "Pemberian Penjelasan", mulai: "27 April 2026 09:30", sampai: "27 April 2026 12:00", perubahan: "Tidak Ada" },
-  { tahap: "Upload Dokumen Kualifikasi", mulai: "27 April 2026 12:05", sampai: "30 April 2026 10:00", perubahan: "1 kali perubahan" },
-  { tahap: "Evaluasi Kualifikasi", mulai: "30 April 2026 10:01", sampai: "8 Mei 2026 14:00", perubahan: "1 kali perubahan" },
-  { tahap: "Penandatanganan Kontrak", mulai: "21 Mei 2026 14:01", sampai: "10 Juli 2026 10:00", perubahan: "Belum Mulai" }
-];
+const DEFAULT_JADWAL: any[] = [];
 
 const infoCache = new Map<string, any>();
 const jadwalCache = new Map<string, any>();
@@ -969,11 +962,13 @@ export default function DetailModal({ item, onClose, language, isPinned = false,
                                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Total Durasi</p>
                                 <p className="text-xl font-black text-slate-700">{durasi_hari > 0 ? `${durasi_hari} Hari` : "-"}</p>
                               </div>
-                              <div className={`p-3.5 rounded-xl border ${jumlah_reschedule > 0 ? 'bg-slate-50/50 border-slate-200' : 'bg-slate-50/50 border-slate-200'}`}>
-                                <p className={`text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5 ${jumlah_reschedule > 0 ? 'text-amber-600' : 'text-slate-600'}`}>
+                              <div className={`p-3.5 rounded-xl border bg-slate-50/50 border-slate-200`}>
+                                <p className={`text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5 ${jumlah_reschedule > 0 ? 'text-amber-600' : 'text-slate-500'}`}>
                                   <RefreshCw className="w-3.5 h-3.5" /> Perubahan Jadwal
                                 </p>
-                                <p className={`text-xl font-black ${jumlah_reschedule > 0 ? 'text-amber-700' : 'text-slate-700'}`}>{jumlah_reschedule} Kali</p>
+                                <p className={`text-xl font-black ${jumlah_reschedule > 0 ? 'text-amber-700' : 'text-slate-700'}`}>
+                                  {jadwalList.length > 0 ? `${jumlah_reschedule} Kali` : "-"}
+                                </p>
                               </div>
                               <div className="p-3.5 rounded-xl border bg-slate-50/50 border-slate-200">
                                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Tahap Terlama</p>
@@ -986,26 +981,40 @@ export default function DetailModal({ item, onClose, language, isPinned = false,
                       })()}
 
                       <div className="relative border-l border-slate-800/20 ml-2.5 sm:ml-3.5 space-y-5 sm:space-y-6 pb-1">
+                        {jadwalList.length === 0 && jadwalSource !== "loading" && (
+                          <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 text-sm text-center">
+                            {language === "EN" ? "Schedule data is currently unavailable." : "Data jadwal belum tersedia saat ini."}
+                          </div>
+                        )}
                         {jadwalList.map((step: any, index: number) => {
-                          let isSelesai = false;
-                          if (step.sampai && step.sampai !== "-") {
+                          let isHighlightGreen = false;
+                          const parseDateStr = (dateStr: string) => {
+                            if (!dateStr || dateStr === "-") return null;
                             const monthMap: Record<string, string> = {
                               Januari: "01", Februari: "02", Maret: "03", April: "04",
                               Mei: "05", Juni: "06", Juli: "07", Agustus: "08",
                               September: "09", Oktober: "10", November: "11", Desember: "12"
                             };
-                            const raw = step.sampai.trim();
-                            const match = raw.match(/^(\d{1,2})\s+(\w+)\s+(\d{4})(?:\s+(\d{2}:\d{2}))?/);
+                            const match = dateStr.trim().match(/^(\d{1,2})\s+(\w+)\s+(\d{4})(?:\s+(\d{2}:\d{2}))?/);
                             if (match) {
                               const [, day, monthName, year, time] = match;
                               const month = monthMap[monthName] || "01";
-                              const timeStr = time || "23:59";
-                              const parsed = new Date(`${year}-${month}-${day.padStart(2, "0")}T${timeStr}:00+07:00`);
-                              isSelesai = !isNaN(parsed.getTime()) && parsed < now;
-                            } else {
-                              const parsed = new Date(raw);
-                              isSelesai = !isNaN(parsed.getTime()) && parsed < now;
+                              const parsed = new Date(`${year}-${month}-${day.padStart(2, "0")}T${time || "23:59"}:00+07:00`);
+                              return isNaN(parsed.getTime()) ? null : parsed;
                             }
+                            const fallback = new Date(dateStr);
+                            return isNaN(fallback.getTime()) ? null : fallback;
+                          };
+
+                          const tMulai = parseDateStr(step.mulai);
+                          const tSampai = parseDateStr(step.sampai);
+
+                          // Jika sudah melewati tanggal mulai (artinya tahap sedang aktif atau sudah lewat) -> hijau
+                          if (tMulai) {
+                            isHighlightGreen = tMulai <= now;
+                          } else if (tSampai) {
+                            // Jika hanya ada tanggal sampai, cek apakah sudah lewat
+                            isHighlightGreen = tSampai < now;
                           }
 
                           return (
@@ -1014,12 +1023,12 @@ export default function DetailModal({ item, onClose, language, isPinned = false,
                                 className="absolute -left-[9px] top-1 rounded-full p-0.5 border"
                                 style={{
                                   backgroundColor: "var(--bg-secondary)",
-                                  borderColor: isSelesai ? "var(--green-text)" : "var(--accent)"
+                                  borderColor: isHighlightGreen ? "var(--green-text)" : "var(--accent)"
                                 }}
                               >
                                 <div
                                   className="w-2 h-2 rounded-full"
-                                  style={{ backgroundColor: isSelesai ? "var(--green-text)" : "var(--accent)" }}
+                                  style={{ backgroundColor: isHighlightGreen ? "var(--green-text)" : "var(--accent)" }}
                                 />
                               </div>
                               <div className="flex flex-col gap-1.5">

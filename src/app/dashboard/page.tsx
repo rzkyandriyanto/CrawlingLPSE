@@ -11,14 +11,10 @@ import { KOTA_PROVINSI_MAP } from "@/lib/geoMap";
 import { LocationDropdown, KOTA_INDONESIA, PROVINSI_INDONESIA } from "@/components/common/LocationDropdown";
 
 import { Suspense } from "react";
-
+import DashboardSkeleton from "@/components/common/DashboardSkeleton";
 export default function DashboardSearchPage() {
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-black"></div>
-      </div>
-    }>
+    <Suspense fallback={<DashboardSkeleton />}>
       <DashboardContent />
     </Suspense>
   );
@@ -211,8 +207,8 @@ function DashboardContent() {
       setKeyword(queryKeyword);
       void runSearch(queryKeyword, true);
     }
-    // Jalankan pencarian otomatis jika tab berubah (Produk/Jasa) atau saat pertama kali load
-    else if (selectedBidang.length > 0) {
+    // Jalankan pencarian otomatis saat pertama kali load
+    else {
       // Kita gunakan ref untuk mencatat filter terakhir agar tidak loop
       void runSearch(keyword || "", true);
     }
@@ -285,76 +281,102 @@ function DashboardContent() {
         <header className="mb-6 sm:mb-8 flex flex-col">
           {/* Top Row Desktop: Label (Left) and Avatar (Right) */}
           <div className="hidden sm:flex items-start justify-between w-full mb-3">
-            <span
-              className="text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full inline-block mt-2"
-              style={{ color: "var(--accent)", backgroundColor: "var(--accent-subtle)" }}
-            >
-              {language === 'EN' ? 'Dashboard' : 'Beranda'}
-            </span>
-            <button
-              onClick={() => router.push("/dashboard/profil")}
-              className="flex items-center gap-3 pr-1.5 pl-4 py-1.5 rounded-full hover:shadow-md transition-all duration-200 group -mt-1 border"
-              style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)" }}
-              title="Ke Profil Anda"
-            >
-              <span className="text-sm font-semibold truncate max-w-[120px]" style={{ color: "var(--text-secondary)" }}>
-                {user?.nama || user?.perusahaan || "Pengguna"}
-              </span>
-              <div
-                className="w-9 h-9 rounded-full overflow-hidden ring-2 shrink-0 flex items-center justify-center transition-all"
-                style={{ backgroundColor: "var(--bg-tertiary)", color: "var(--text-primary)" }}
-              >
-                {user?.foto_url ? (
-                  <img src={user.foto_url} alt="Avatar" className="w-full h-full object-cover" />
-                ) : (
-                  <User size={18} strokeWidth={2.5} />
-                )}
-              </div>
-            </button>
+            {isPreparing ? (
+              <>
+                <div className="h-8 w-24 bg-slate-200/80 dark:bg-slate-800/80 rounded-full animate-pulse mt-2" />
+                <div className="h-12 w-48 bg-slate-200/80 dark:bg-slate-800/80 rounded-full animate-pulse -mt-1" />
+              </>
+            ) : (
+              <>
+                <span
+                  className="text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full inline-block mt-2"
+                  style={{ color: "var(--accent)", backgroundColor: "var(--accent-subtle)" }}
+                >
+                  {language === 'EN' ? 'Dashboard' : 'Beranda'}
+                </span>
+                <button
+                  onClick={() => router.push("/dashboard/profil")}
+                  className="flex items-center gap-3 pr-1.5 pl-4 py-1.5 rounded-full hover:shadow-md transition-all duration-200 group -mt-1 border"
+                  style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)" }}
+                  title="Ke Profil Anda"
+                >
+                  <span className="text-sm font-semibold truncate max-w-[120px]" style={{ color: "var(--text-secondary)" }}>
+                    {user?.nama || user?.perusahaan || "Pengguna"}
+                  </span>
+                  <div
+                    className="w-9 h-9 rounded-full overflow-hidden ring-2 shrink-0 flex items-center justify-center transition-all"
+                    style={{ backgroundColor: "var(--bg-tertiary)", color: "var(--text-primary)" }}
+                  >
+                    {user?.foto_url ? (
+                      <img src={user.foto_url} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <User size={18} strokeWidth={2.5} />
+                    )}
+                  </div>
+                </button>
+              </>
+            )}
           </div>
 
           {/* Top Row Mobile: Label only */}
           <div className="flex sm:hidden mb-3">
-            <span
-              className="text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full inline-block"
-              style={{ color: "var(--accent)", backgroundColor: "var(--accent-subtle)" }}
-            >
-              {language === 'EN' ? 'Dashboard' : 'Beranda'}
-            </span>
+            {isPreparing ? (
+              <div className="h-8 w-24 bg-slate-200/80 dark:bg-slate-800/80 rounded-full animate-pulse" />
+            ) : (
+              <span
+                className="text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full inline-block"
+                style={{ color: "var(--accent)", backgroundColor: "var(--accent-subtle)" }}
+              >
+                {language === 'EN' ? 'Dashboard' : 'Beranda'}
+              </span>
+            )}
           </div>
 
           <div className="flex-1 flex flex-col sm:flex-row sm:items-start justify-between gap-6">
             <div className="flex-1">
-              <h1 className="text-2xl sm:text-3xl font-black mb-2 flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
-                Selamat datang kembali, {user?.nama || user?.perusahaan || "Pengguna"}! 👋
-              </h1>
-              <p className="text-sm sm:text-base font-medium" style={{ color: "var(--text-muted)" }}>
-                Berikut adalah Barang dan Jasa properti yang telah disesuaikan.
-              </p>
+              {isPreparing ? (
+                <div className="animate-pulse">
+                  <div className="h-10 sm:h-12 w-3/4 max-w-lg rounded-2xl mb-3 bg-slate-200/90 dark:bg-slate-800/90" />
+                  <div className="h-5 sm:h-6 w-1/2 max-w-xs rounded-xl bg-slate-200/60 dark:bg-slate-800/60" />
+                </div>
+              ) : (
+                <>
+                  <h1 className="text-2xl sm:text-3xl font-black mb-2 flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
+                    Selamat datang kembali, {user?.nama || user?.perusahaan || "Pengguna"}! 👋
+                  </h1>
+                  <p className="text-sm sm:text-base font-medium" style={{ color: "var(--text-muted)" }}>
+                    Berikut adalah Barang dan Jasa properti yang telah disesuaikan.
+                  </p>
+                </>
+              )}
             </div>
 
             {/* Avatar Mobile */}
             <div className="flex sm:hidden items-center">
-              <button
-                onClick={() => router.push("/dashboard/profil")}
-                className="flex items-center gap-3 pr-1.5 pl-4 py-1.5 rounded-full hover:shadow-md transition-all duration-200 group border"
-                style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)" }}
-                title="Ke Profil Anda"
-              >
-                <span className="text-sm font-semibold truncate max-w-[120px]" style={{ color: "var(--text-secondary)" }}>
-                  {user?.nama || user?.perusahaan || "Pengguna"}
-                </span>
-                <div
-                  className="w-10 h-10 rounded-full overflow-hidden ring-2 transition-all flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: "var(--bg-tertiary)", color: "var(--text-primary)" }}
+              {isPreparing ? (
+                <div className="h-10 w-32 bg-slate-200/80 dark:bg-slate-800/80 rounded-full animate-pulse" />
+              ) : (
+                <button
+                  onClick={() => router.push("/dashboard/profil")}
+                  className="flex items-center gap-3 pr-1.5 pl-4 py-1.5 rounded-full hover:shadow-md transition-all duration-200 group border"
+                  style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)" }}
+                  title="Ke Profil Anda"
                 >
-                  {user?.foto_url ? (
-                    <img src={user.foto_url} alt="Avatar" className="w-full h-full object-cover" />
-                  ) : (
-                    <User size={20} strokeWidth={2.5} />
-                  )}
-                </div>
-              </button>
+                  <span className="text-sm font-semibold truncate max-w-[120px]" style={{ color: "var(--text-secondary)" }}>
+                    {user?.nama || user?.perusahaan || "Pengguna"}
+                  </span>
+                  <div
+                    className="w-10 h-10 rounded-full overflow-hidden ring-2 transition-all flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: "var(--bg-tertiary)", color: "var(--text-primary)" }}
+                  >
+                    {user?.foto_url ? (
+                      <img src={user.foto_url} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <User size={20} strokeWidth={2.5} />
+                    )}
+                  </div>
+                </button>
+              )}
             </div>
           </div>
         </header>
@@ -591,23 +613,9 @@ function DashboardContent() {
 
 
       {isPreparing ? (
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-2xl mx-auto mt-4 sm:mt-10 rounded-2xl border p-6 sm:p-10 text-center"
-          style={{ borderColor: "var(--border-primary)", backgroundColor: "var(--bg-card)" }}
-        >
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ repeat: Infinity, duration: 2.4, ease: "linear" }}
-            className="mx-auto mb-4 sm:mb-6 h-10 w-10 sm:h-14 sm:w-14 rounded-full border-4 border-dashed"
-            style={{ borderColor: "var(--accent)" }}
-          />
-          <h2 className="text-xl sm:text-2xl font-black">{language === 'EN' ? 'Preparing dashboard...' : 'Menyiapkan dashboard...'}</h2>
-          <p className="mt-2 sm:mt-3 text-xs sm:text-sm text-slate-500">
-            {language === 'EN' ? 'The system is matching procurement projects and tenders based on your selected fields.' : 'Sistem sedang mencocokkan lelang pengadaan (Tender) dari LPSE berdasarkan bidang Anda.'}
-          </p>
-        </motion.div>
+        <div className="mt-6 sm:mt-10 mb-10 w-full overflow-hidden rounded-3xl border" style={{ borderColor: "var(--border-primary)" }}>
+          <DashboardSkeleton />
+        </div>
       ) : (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
 
@@ -796,7 +804,7 @@ function DashboardContent() {
               })
             ) : (
               <div className="py-12 sm:py-20 text-center font-medium text-sm sm:text-base" style={{ color: "var(--text-muted)" }}>
-                {language === 'EN' ? "Enter a keyword to start searching for LPSE projects and tenders." : "Masukkan keyword untuk mulai mencari paket pengadaan atau lelang LPSE."}
+                {language === 'EN' ? "No tenders or projects found. Try adjusting your keyword, region, or category filter." : "Tidak ada tender atau paket pengadaan yang ditemukan. Coba ubah keyword, wilayah, atau ganti tab kategori (Barang/Jasa/Semua)."}
               </div>
             )}
           </div>
@@ -910,9 +918,9 @@ function DashboardContent() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col border border-slate-200"
+              className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col border border-slate-200"
             >
-              <div className="p-5 border-b flex items-center justify-between bg-slate-50">
+              <div className="p-5 border-b flex items-center justify-between bg-slate-50 rounded-t-2xl">
                 <h3 className="font-bold text-slate-800 text-lg">Preferensi Wilayah Tambahan</h3>
                 <button
                   onClick={() => setIsExtraRegionModalOpen(false)}
@@ -977,7 +985,7 @@ function DashboardContent() {
                 )}
               </div>
               
-              <div className="p-4 border-t bg-slate-50 flex justify-end gap-3">
+              <div className="p-4 border-t bg-slate-50 flex justify-end gap-3 rounded-b-2xl">
                 <button
                   onClick={() => setIsExtraRegionModalOpen(false)}
                   className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"

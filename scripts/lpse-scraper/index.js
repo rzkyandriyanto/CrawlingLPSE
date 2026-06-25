@@ -275,18 +275,17 @@ async function saveBatch(items) {
 // SCRAPER SATU LPSE — v4 (DOM Scraping Next.js)
 // ════════════════════════════════════════════════════════════════
 async function scrapeSingleLpse(lpse, browser) {
-  let slug;
+  let listUrl;
+  let baseUrl;
   try {
-    const u = new URL(lpse.url.startsWith("http") ? lpse.url : `https://${lpse.url}`);
-    slug = u.hostname === "spse.inaproc.id"
-      ? u.pathname.replace(/^\//, "").split("/")[0]
-      : u.hostname.replace(".go.id", "").replace("lpse.", "").replace("spse.", "");
+    baseUrl = lpse.url.startsWith("http") ? lpse.url : `https://${lpse.url}`;
+    // Hapus trailing slash jika ada, lalu tambah /lelang
+    listUrl = baseUrl.replace(/\/$/, "") + "/lelang";
   } catch {
     // URL tidak valid → dianggap error nyata, bukan tender kosong
     return { items: [], scraperError: true };
   }
 
-  const listUrl = `${BASE_DOMAIN}/${slug}/lelang`;
   const collectedRows = [];
 
   try {
@@ -298,7 +297,7 @@ async function scrapeSingleLpse(lpse, browser) {
     await new Promise(r => setTimeout(r, PAGE_WAIT_MS));
 
     for (let p = 0; p < PAGES_PER_LPSE; p++) {
-      const rows = await page.evaluate((slug, baseDomain) => {
+      const rows = await page.evaluate((baseUrl) => {
         const results = [];
         const tableRows = Array.from(document.querySelectorAll("table tbody tr, tbody tr"));
 
@@ -325,10 +324,10 @@ async function scrapeSingleLpse(lpse, browser) {
           const tahapan = cells[3]?.innerText?.trim() || "";
           const hpsRaw = cells[4]?.innerText?.trim() || "N/A";
 
-          results.push({ lelangId, nama_paket: namaPaket, instansi, tahap_saat_ini: tahapan, hps: hpsRaw, metode_detail: metodeLine, url_lpse: `${baseDomain}/${slug}` });
+          results.push({ lelangId, nama_paket: namaPaket, instansi, tahap_saat_ini: tahapan, hps: hpsRaw, metode_detail: metodeLine, url_lpse: baseUrl });
         }
         return results;
-      }, slug, BASE_DOMAIN);
+      }, baseUrl);
 
       for (const row of rows) {
         const { tag, kategori } = classifyPaket(row.nama_paket);
@@ -532,7 +531,7 @@ async function getActiveLpseList() {
   return sources;
 }
 
-agenda.define("scrape all lpse", async () => {
+agenda.define("scrape all lpse", { lockLifetime: 2 * 60 * 60 * 1000, concurrency: 1 }, async () => {
   const t0 = Date.now();
 
   // PERUBAHAN: Ambil daftar LPSE aktif dari MongoDB, bukan dari file statis
@@ -557,7 +556,7 @@ agenda.define("scrape all lpse", async () => {
   console.log(`${"═".repeat(65)}\n`);
 });
 
-agenda.define("sync jadwal aktif", async () => {
+agenda.define("sync jadwal aktif", { lockLifetime: 30 * 60 * 1000, concurrency: 1 }, async () => {
   console.log(`\n📅  Sync jadwal tender aktif...`);
   const tenders = await TenderModel.find({ url_lpse: { $exists: true, $ne: "" }, lelangId: { $not: /^PKG-/ }, status: "aktif" }).select("lelangId url_lpse").lean();
   let synced = 0;
@@ -579,10 +578,14 @@ agenda.define("sync jadwal aktif", async () => {
 
     try {
       const { url_lpse, lelangId } = tender;
-      const slug = new URL(url_lpse).pathname.replace(/^\//, "").split("/")[0] || url_lpse.split("/")[3];
-      const jadwalUrl = `${BASE_DOMAIN}/${slug}/lelang/${lelangId}/jadwal`;
+      const baseUrl = url_lpse.replace(/\/$/, "");
+      const jadwalUrl = `${baseUrl}/lelang/${lelangId}/jadwal`;
       const page = await browser.newPage();
       await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+      await page.setExtraHTTPHeaders({
+        "Referer": `${baseUrl}/lelang`,
+        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7"
+      });
       await page.goto(jadwalUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
       await new Promise(r => setTimeout(r, 1000));
 
@@ -613,7 +616,7 @@ agenda.define("sync jadwal aktif", async () => {
   console.log(`✅  Jadwal sync: ${synced}/${tenders.length} diperbarui\n`);
 });
 
-agenda.define("cleanup expired tenders", async () => {
+agenda.define("cleanup expired tenders", { lockLifetime: 10 * 60 * 1000, concurrency: 1 }, async () => {
   console.log(`\n🗑️   Cleanup tender kadaluarsa...`);
   const now = Date.now();
   const GRACE = 7 * 24 * 60 * 60 * 1000;

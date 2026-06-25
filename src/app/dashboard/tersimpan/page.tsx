@@ -2,11 +2,14 @@
 
 import { useDashboard } from "../DashboardContext";
 import SavedView from "@/components/tersimpan/SavedView";
+import PageSkeleton from "@/components/common/PageSkeleton";
 import { useRouter } from "next/navigation";
 
 export default function TersimpanPage() {
-  const { language, pinnedItems, togglePin, removePin } = useDashboard();
+  const { user, language, pinnedItems, togglePin, removePin } = useDashboard();
   const router = useRouter();
+
+  if (!user) return <PageSkeleton />;
 
   return (
     <main

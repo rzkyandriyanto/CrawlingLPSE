@@ -6,9 +6,10 @@ import { useRouter } from "next/navigation";
 import { Trophy, Clock, SearchX, Pin } from "lucide-react";
 import { SearchResultItem } from "@/types";
 import ProductCard from "@/components/common/ProductCard";
+import PageSkeleton from "@/components/common/PageSkeleton";
 
 export default function SelesaiPage() {
-  const { language, togglePin } = useDashboard();
+  const { user, language, togglePin } = useDashboard();
   const router = useRouter();
   
   const [items, setItems] = useState<SearchResultItem[]>([]);
@@ -49,6 +50,8 @@ export default function SelesaiPage() {
     if (sisa === null) return false;
     return sisa === filterHari;
   });
+
+  if (!user) return <PageSkeleton />;
 
   return (
     <main

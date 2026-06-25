@@ -2,14 +2,25 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { LayoutDashboard, Users, Database, LogOut, ChevronRight, Menu, X, LineChart, Home } from "lucide-react";
+import { LayoutDashboard, Users, Database, LogOut, ChevronRight, Menu, X, LineChart, Home, Package, Briefcase, ChevronDown } from "lucide-react";
 import { toast } from "react-hot-toast";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [openMenus, setOpenMenus] = useState<string[]>([]);
   const router = useRouter();
   const pathname = usePathname();
+
+  useEffect(() => {
+    if (pathname.startsWith("/admin/analisis")) {
+      setOpenMenus(prev => prev.includes("Daftar Analisis") ? prev : [...prev, "Daftar Analisis"]);
+    }
+  }, [pathname]);
+
+  const toggleMenu = (name: string) => {
+    setOpenMenus(prev => prev.includes(name) ? prev.filter(m => m !== name) : [...prev, name]);
+  };
 
   useEffect(() => {
     const checkAdmin = async () => {
@@ -55,7 +66,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "Dashboard", path: "/admin", icon: LayoutDashboard },
     { name: "Manajemen User", path: "/admin/users", icon: Users },
     { name: "Manajemen Data", path: "/admin/data", icon: Database },
-    { name: "Daftar Analisis", path: "/admin/analisis", icon: LineChart },
+    { 
+      name: "Daftar Analisis", 
+      path: "/admin/analisis", 
+      icon: LineChart,
+      subItems: [
+        { name: "Analisis Pengguna", path: "/admin/analisis/pengguna", icon: Users },
+        { name: "Analisis Barang", path: "/admin/analisis/barang", icon: Package },
+        { name: "Analisis Jasa", path: "/admin/analisis/jasa", icon: Briefcase },
+      ]
+    },
   ];
 
   if (!isAdmin) {
@@ -87,23 +107,71 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           
           <nav className="space-y-1.5">
             {navItems.map((item) => {
-              const isActive = pathname === item.path;
+              const hasSubItems = !!item.subItems;
+              const isActive = pathname === item.path || (hasSubItems && item.subItems!.some(sub => pathname === sub.path));
+              const isOpen = openMenus.includes(item.name);
+
               return (
-                <button 
-                  key={item.path}
-                  onClick={() => router.push(item.path)} 
-                  className={`w-full flex items-center justify-between group px-4 py-3.5 rounded-2xl transition-all duration-300 ${
-                    isActive 
-                    ? "bg-black text-white shadow-xl shadow-black/10 translate-x-1" 
-                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} />
-                    <span className={`font-bold text-sm ${isActive ? "opacity-100" : "opacity-80"}`}>{item.name}</span>
-                  </div>
-                  {isActive && <ChevronRight size={14} className="opacity-50" />}
-                </button>
+                <div key={item.path} className="space-y-1">
+                  <button 
+                    onClick={() => {
+                      if (hasSubItems) {
+                        toggleMenu(item.name);
+                      } else {
+                        router.push(item.path);
+                      }
+                    }} 
+                    className={`w-full flex items-center justify-between group px-4 py-3.5 rounded-2xl transition-all duration-300 ${
+                      isActive && !hasSubItems
+                      ? "bg-black text-white shadow-xl shadow-black/10 translate-x-1" 
+                      : (isActive && hasSubItems ? "bg-black text-white shadow-xl shadow-black/10" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900")
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} />
+                      <span className={`font-bold text-sm ${isActive ? "opacity-100" : "opacity-80"}`}>{item.name}</span>
+                    </div>
+                    {hasSubItems ? (
+                      <ChevronDown size={16} className={`opacity-50 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                    ) : (
+                      isActive && <ChevronRight size={14} className="opacity-50" />
+                    )}
+                  </button>
+
+                  {/* SubItems */}
+                  {hasSubItems && (
+                    <AnimatePresence>
+                      {isOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="ml-6 pl-4 border-l border-slate-200 flex flex-col gap-1 mt-2">
+                            {item.subItems!.map((subItem) => {
+                              const isSubActive = pathname === subItem.path;
+                              return (
+                                <button
+                                  key={subItem.path}
+                                  onClick={() => router.push(subItem.path)}
+                                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                                    isSubActive
+                                      ? "bg-slate-50 text-blue-600 font-bold"
+                                      : "text-slate-500 hover:bg-slate-50 hover:text-slate-900 font-medium"
+                                  }`}
+                                >
+                                  <subItem.icon size={16} strokeWidth={isSubActive ? 2.5 : 2} />
+                                  <span className="text-sm">{subItem.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  )}
+                </div>
               );
             })}
           </nav>

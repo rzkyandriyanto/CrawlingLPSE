@@ -13,7 +13,9 @@ type ProfileViewProps = {
   uploadingFoto: boolean;
   uploadingCp?: boolean;
   isEditingProfile: boolean;
+  isEditingCompany: boolean;
   profileSaving: boolean;
+  companySaving: boolean;
   profileForm: {
     perusahaan: string;
     email: string;
@@ -21,6 +23,7 @@ type ProfileViewProps = {
     provinsi: string;
     website: string;
     tag: string[];
+    wilayah_operasi: string[];
   };
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   pdfInputRef?: React.RefObject<HTMLInputElement | null>;
@@ -29,6 +32,9 @@ type ProfileViewProps = {
   onStartEditing: () => void;
   onCancelEditing: () => void;
   onSaveProfile: () => void;
+  onStartEditingCompany: () => void;
+  onCancelEditingCompany: () => void;
+  onSaveCompany: () => void;
   onFormChange: (field: keyof ProfileViewProps["profileForm"], value: string) => void;
   onToggleProfileTag: (tag: string) => void;
   daftarBidang: string[];
@@ -41,7 +47,9 @@ export default function ProfileView({
   uploadingFoto,
   uploadingCp,
   isEditingProfile,
+  isEditingCompany,
   profileSaving,
+  companySaving,
   profileForm,
   fileInputRef,
   pdfInputRef,
@@ -50,6 +58,9 @@ export default function ProfileView({
   onStartEditing,
   onCancelEditing,
   onSaveProfile,
+  onStartEditingCompany,
+  onCancelEditingCompany,
+  onSaveCompany,
   onFormChange,
   onToggleProfileTag,
   daftarBidang,
@@ -332,9 +343,43 @@ export default function ProfileView({
         {/* PROFIL PERUSAHAAN (AI Extracted PDF) */}
         <div className="rounded-[2rem] border shadow-sm overflow-hidden" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)" }}>
           <div className="px-6 sm:px-8 py-6 sm:py-8">
-            <h2 className="text-xl sm:text-2xl font-black mb-4 flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
-              {language === "EN" ? "Company Profile (AI)" : "Profil Perusahaan (AI)"}
-            </h2>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
+                {language === "EN" ? "Company Profile (AI)" : "Profil Perusahaan (AI)"}
+              </h2>
+              {cp && !isEditingCompany ? (
+                <button
+                  onClick={onStartEditingCompany}
+                  className="px-4 py-2 rounded-xl font-bold text-sm transition-all border shadow-sm flex items-center gap-2 hover:bg-[var(--bg-secondary)]"
+                  style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }}
+                >
+                  <Edit3 size={14} /> {language === "EN" ? "Edit Data" : "Edit Data"}
+                </button>
+              ) : isEditingCompany ? (
+                <div className="flex gap-2">
+                  <button
+                    onClick={onSaveCompany}
+                    disabled={companySaving}
+                    className="px-4 py-2 text-white rounded-xl font-bold text-sm transition-all shadow-md flex items-center gap-2 disabled:opacity-50"
+                    style={{ backgroundColor: "var(--accent)" }}
+                  >
+                    {companySaving ? (
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-dashed border-white" />
+                    ) : (
+                      <Save size={14} />
+                    )}
+                    {language === "EN" ? "Save" : "Simpan"}
+                  </button>
+                  <button
+                    onClick={onCancelEditingCompany}
+                    className="px-4 py-2 rounded-xl font-bold text-sm transition-all border flex items-center gap-2 hover:bg-[var(--bg-secondary)]"
+                    style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)", color: "var(--text-secondary)" }}
+                  >
+                    <XCircle size={14} /> {language === "EN" ? "Cancel" : "Batal"}
+                  </button>
+                </div>
+              ) : null}
+            </div>
             <p className="text-sm font-medium mb-6" style={{ color: "var(--text-secondary)" }}>
               {language === "EN" 
                 ? "Upload your Company Profile PDF for advanced AI matching capabilities based on service keywords and financial capacity." 
@@ -399,9 +444,39 @@ export default function ProfileView({
                         {language === "EN" ? "Operation Areas" : "Wilayah Operasi"}
                       </span>
                     </div>
-                    <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                      {cp.wilayah_operasi?.join(", ") || <span className="italic text-[var(--text-muted)]">-</span>}
-                    </p>
+                    {isEditingCompany ? (
+                      <div>
+                        <LocationDropdown
+                          value=""
+                          onChange={(val) => {
+                            if (val && !profileForm.wilayah_operasi.includes(val)) {
+                              onFormChange("wilayah_operasi", [...profileForm.wilayah_operasi, val] as any);
+                            }
+                          }}
+                          options={[...PROVINSI_INDONESIA, ...KOTA_INDONESIA]}
+                          placeholder={language === "EN" ? "Add region..." : "Tambah wilayah..."}
+                          label="wilayah"
+                        />
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {profileForm.wilayah_operasi.map((w: string, i: number) => (
+                            <span key={i} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-primary)", color: "var(--text-primary)" }}>
+                              {w}
+                              <button
+                                type="button"
+                                onClick={() => onFormChange("wilayah_operasi", profileForm.wilayah_operasi.filter((val: string) => val !== w) as any)}
+                                className="hover:text-red-500 transition-colors"
+                              >
+                                <X size={12} />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                        {cp?.wilayah_operasi?.length > 0 ? cp.wilayah_operasi.join(", ") : <span className="italic text-[var(--text-muted)]">-</span>}
+                      </p>
+                    )}
                   </div>
 
                   <div className="p-4 sm:p-5 rounded-2xl border" style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border-primary)" }}>

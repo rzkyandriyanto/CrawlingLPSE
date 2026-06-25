@@ -4,12 +4,15 @@ import { useState } from "react";
 import { useDashboard } from "../DashboardContext";
 import { useTheme } from "@/components/ThemeProvider";
 import SettingsView from "@/components/pengaturan/SettingsView";
+import PageSkeleton from "@/components/common/PageSkeleton";
 import { useRouter } from "next/navigation";
 
 export default function PengaturanPage() {
   const { user, language, setLanguage } = useDashboard();
   const { isDarkMode, setIsDarkMode } = useTheme();
   const router = useRouter();
+
+  if (!user) return <PageSkeleton />;
 
   return (
     <main

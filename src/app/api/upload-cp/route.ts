@@ -82,29 +82,43 @@ Aturan:
 Teks Company Profile:
 ${truncatedText}`;
 
-    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
+    let textResult = "";
+
+    try {
+      const orKey = process.env.OPENROUTER_API_KEY;
+      if (!orKey) {
+        return NextResponse.json({ error: "OpenRouter API Key tidak ditemukan." }, { status: 500 });
+      }
+
+      const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${orKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+          "X-Title": "Seleno AI"
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [{ role: "user", content: prompt }],
           temperature: 0.1,
-          responseMimeType: "application/json"
-        }
-      })
-    });
+          max_tokens: 4000,
+          response_format: { type: "json_object" }
+        })
+      });
 
-    if (!geminiRes.ok) {
-      const errTxt = await geminiRes.text();
-      console.error("Gemini API Error:", errTxt);
+      if (!orRes.ok) {
+        console.error("OpenRouter API Error:", await orRes.text());
+        return NextResponse.json({ error: "Gagal memproses dokumen dengan AI." }, { status: 500 });
+      }
+
+      const orData = await orRes.json();
+      textResult = orData.choices?.[0]?.message?.content;
+      
+      if (!textResult) throw new Error("OpenRouter returned empty response");
+    } catch (error: any) {
+      console.error("OpenRouter API failed:", error.message);
       return NextResponse.json({ error: "Gagal memproses dokumen dengan AI." }, { status: 500 });
-    }
-
-    const data = await geminiRes.json();
-    let textResult = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    
-    if (!textResult) {
-      return NextResponse.json({ error: "AI tidak mengembalikan data yang valid." }, { status: 500 });
     }
 
     let parsedJson = {};
@@ -113,7 +127,7 @@ ${truncatedText}`;
       textResult = textResult.replace(/^```json/i, "").replace(/^```/i, "").replace(/```$/i, "").trim();
       parsedJson = JSON.parse(textResult);
     } catch (e) {
-      console.error("Failed to parse Gemini JSON:", textResult);
+      console.error("Failed to parse JSON:", textResult);
       return NextResponse.json({ error: "Gagal mengolah format data AI." }, { status: 500 });
     }
 

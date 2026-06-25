@@ -32,10 +32,8 @@ function calcRelevanceScore(
       w.includes("nasional") || w.includes("indonesia") || w.includes("seluruh")
     );
 
-    // Hitung skor_wilayah berdasarkan wilayah_operasi CP
-    let skor_wilayah = 30; // Default: tender di luar jangkauan
+    let skor_wilayah = 0; // Default irrelevant
     
-    // Cek apakah tender match dengan wilayah eksplisit (contoh: "Malang", "Denpasar")
     const explicitMatch = wilayahOps.some((wOp: string) => {
       // Abaikan kata kunci catch-all saat mencari match eksplisit
       if (wOp === "nasional" || wOp === "indonesia" || wOp === "seluruh") return false;
@@ -43,48 +41,51 @@ function calcRelevanceScore(
     });
 
     if (explicitMatch) {
-      skor_wilayah = 100; // Wilayah yang disebut spesifik dapet prioritas utama
+      skor_wilayah = 65; // Prioritas utama wilayah
     } else if (isNasional) {
-      skor_wilayah = 70; // Wilayah lain masuk kualifikasi (karena 'nasional') tapi bukan prioritas utama
+      skor_wilayah = 50; 
+    } else if (wilayahOps.length === 0) {
+      skor_wilayah = 40; // Jika belum diisi, anggap netral
     }
 
-    // Skor Bidang (Maks 100)
-    let skor_bidang = 0;
+    let match_count = 0;
+
+    // Hitung kecocokan dari Bidang Usaha / KBLI / SBU
     const allBidang = [...(cp.bidang_usaha || []), ...(cp.kode_kbli || []), ...(cp.sub_bidang || [])];
     allBidang.forEach((b: string) => {
-      if (b.length > 2 && (kategori.toLowerCase().includes(b.toLowerCase()) || tagTender.toLowerCase().includes(b.toLowerCase()))) {
-        skor_bidang += 50;
+      if (b.length > 2 && (kategori.toLowerCase().includes(b.toLowerCase()) || tagTender.toLowerCase().includes(b.toLowerCase()) || namaPaket.includes(b.toLowerCase()))) {
+        match_count += 1;
       }
     });
-    skor_bidang = Math.min(skor_bidang, 100);
 
-    // Skor Keyword (Maks 100)
-    let skor_keyword = 0;
+    // Hitung kecocokan dari Kata Kunci Layanan
     if (cp.kata_kunci_layanan?.length > 0) {
       cp.kata_kunci_layanan.forEach((kw: string) => {
-        if (kw.length > 2 && namaPaket.includes(kw.toLowerCase())) skor_keyword += 50;
+        if (kw.length > 2 && (namaPaket.includes(kw.toLowerCase()) || tagTender.toLowerCase().includes(kw.toLowerCase()))) {
+          match_count += 1;
+        }
       });
     }
-    skor_keyword = Math.min(skor_keyword, 100);
 
-    // Skor Nilai (Maks 100)
-    let skor_nilai = 50; // Neutral default
+    // Semakin banyak keyword yang cocok, semakin bagus skornya
+    // Tapi poin wilayah tetap lebih besar dari satu atau dua keyword
+    const skor_keyword = Math.min(match_count * 15, 60);
+
+    // Skor Nilai (Pagu)
+    let skor_nilai = 0; 
     if (cp.nilai_proyek_max && cp.nilai_proyek_max > 0) {
       const paguNum = Number((tender.pagu || "0").replace(/Rp/gi, "").replace(/\./g, "").replace(/,/g, ".").replace(/[^0-9.]/g, ""));
-      if (paguNum > 0 && paguNum <= cp.nilai_proyek_max * 1.5) skor_nilai = 100;
-      else if (paguNum > 0) skor_nilai = 30;
+      if (paguNum > 0 && paguNum <= cp.nilai_proyek_max * 1.5) {
+        skor_nilai = 0; // Sesuai budget (netral)
+      } else if (paguNum > cp.nilai_proyek_max * 1.5) {
+        skor_nilai = -15; // Penalti karena over-budget
+      }
     }
 
-    // Formula CP: wilayah_operasi + doping bidang/keyword/nilai
-    const bonus_cp = Math.round(((skor_bidang * 0.40) + (skor_keyword * 0.35) + (skor_nilai * 0.25)) * 0.30);
+    let final_score = skor_wilayah + skor_keyword + skor_nilai;
     
-    let final_score = skor_wilayah + bonus_cp;
-    if (!explicitMatch && isNasional) {
-      // Cap tender nasional di 95 agar wilayah spesifik (bisa 100) selalu tampil di atas
-      final_score = Math.min(95, final_score);
-    }
-    
-    return Math.min(100, final_score);
+    // Pastikan tetap di rentang 0-100
+    return Math.max(0, Math.min(100, final_score));
   }
 
   // ══════════════════════════════════════════════════════
@@ -115,6 +116,10 @@ function calcRelevanceScore(
 
   return skor_wilayah;
 }
+
+const escapeRegex = (string: string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -186,7 +191,7 @@ export async function POST(req: NextRequest) {
       if (trimmedKeyword) {
         const queryWords = trimmedKeyword.split(/\s+/).filter(Boolean);
         queryWords.forEach((qw: string) => {
-          andConditions.push({ nama_paket: { $regex: qw, $options: "i" } });
+          andConditions.push({ nama_paket: { $regex: escapeRegex(qw), $options: "i" } });
         });
       }
       
@@ -213,16 +218,8 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Menggunakan STRICT FILTER: Hanya data yang cocok dengan bidang user yang akan diambil
-      if (bidang && bidang.length > 0) {
-        const orConditions: any[] = [];
-        bidang.forEach((b: string) => {
-          orConditions.push({ tag: { $regex: `^${b}$`, $options: "i" } });
-          orConditions.push({ tag: { $regex: b, $options: "i" } }); // fallback
-          orConditions.push({ kategori: { $regex: b, $options: "i" } });
-        });
-        andConditions.push({ $or: orConditions });
-      }
+      // Bidang is no longer used as a strict filter to allow broader searches
+      // and prevent 0 results when users want to search outside their registered tag.
 
       // STOP WORDS untuk wilayah agar 'kota' atau 'kabupaten' tidak menjadi keyword pencarian mandiri
       const regionStopWords = ["kota", "kabupaten", "kab", "provinsi", "prov", "daerah", "pusat"];
@@ -232,13 +229,15 @@ export async function POST(req: NextRequest) {
         // Jika user melakukan pencarian wilayah lain (extraRegions)
         const wilayahOrConditions: any[] = [];
         extraRegions.forEach((wOp: string) => {
+          const escapedWOp = escapeRegex(wOp);
           const parts = wOp.split(/[,\s]+/).filter((p: string) => p.length > 3 && !regionStopWords.includes(p.toLowerCase()));
           parts.forEach((p: string) => {
-            wilayahOrConditions.push({ wilayah: { $regex: p, $options: "i" } });
-            wilayahOrConditions.push({ instansi: { $regex: p, $options: "i" } });
+            const escapedP = escapeRegex(p);
+            wilayahOrConditions.push({ wilayah: { $regex: escapedP, $options: "i" } });
+            wilayahOrConditions.push({ instansi: { $regex: escapedP, $options: "i" } });
           });
-          wilayahOrConditions.push({ wilayah: { $regex: wOp, $options: "i" } });
-          wilayahOrConditions.push({ instansi: { $regex: wOp, $options: "i" } });
+          wilayahOrConditions.push({ wilayah: { $regex: escapedWOp, $options: "i" } });
+          wilayahOrConditions.push({ instansi: { $regex: escapedWOp, $options: "i" } });
         });
         if (wilayahOrConditions.length > 0) {
           andConditions.push({ $or: wilayahOrConditions });
@@ -254,13 +253,15 @@ export async function POST(req: NextRequest) {
         if (!isNasional && wilayahOps.length > 0) {
           const wilayahOrConditions: any[] = [];
           wilayahOps.forEach((wOp: string) => {
+            const escapedWOp = escapeRegex(wOp);
             const parts = wOp.split(/[,\s]+/).filter((p: string) => p.length > 3 && !regionStopWords.includes(p.toLowerCase()));
             parts.forEach((p: string) => {
-              wilayahOrConditions.push({ wilayah: { $regex: p, $options: "i" } });
-              wilayahOrConditions.push({ instansi: { $regex: p, $options: "i" } });
+              const escapedP = escapeRegex(p);
+              wilayahOrConditions.push({ wilayah: { $regex: escapedP, $options: "i" } });
+              wilayahOrConditions.push({ instansi: { $regex: escapedP, $options: "i" } });
             });
-            wilayahOrConditions.push({ wilayah: { $regex: wOp, $options: "i" } });
-            wilayahOrConditions.push({ instansi: { $regex: wOp, $options: "i" } });
+            wilayahOrConditions.push({ wilayah: { $regex: escapedWOp, $options: "i" } });
+            wilayahOrConditions.push({ instansi: { $regex: escapedWOp, $options: "i" } });
           });
           
           if (wilayahOrConditions.length > 0) {
@@ -271,7 +272,7 @@ export async function POST(req: NextRequest) {
 
       if (targetLpse && targetLpse !== "Semua Instansi (Otomatis)") {
         if (!extraRegions || extraRegions.length === 0) {
-          query.instansi = { $regex: targetLpse.replace("LPSE ", ""), $options: "i" };
+          query.instansi = { $regex: escapeRegex(targetLpse.replace("LPSE ", "")), $options: "i" };
         }
       }
 
@@ -410,14 +411,7 @@ export async function POST(req: NextRequest) {
           query.nama_produk = { $regex: trimmedKeyword, $options: "i" };
         }
       }
-      if (bidang && bidang.length > 0) {
-        const orConditions = bidang.map((b: string) => ({ tag: b }));
-        if (Object.keys(query).length > 0) {
-           query = { $and: [query, { $or: orConditions }] };
-        } else {
-           query.$or = orConditions;
-        }
-      }
+      // Bidang is no longer used as a strict filter to allow broader searches
 
       const produkData = await ProductModel.find(query)
         .sort({ createdAt: -1 })

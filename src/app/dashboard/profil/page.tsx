@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { useDashboard } from "../DashboardContext";
 // supabase import removed
 import ProfileView from "@/components/profil/ProfileView";
+import PageSkeleton from "@/components/common/PageSkeleton";
 import { toast } from "react-hot-toast";
 
 const DAFTAR_BIDANG = [
@@ -43,7 +44,9 @@ export default function ProfilPage() {
   const { user, setUser, language } = useDashboard();
   
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isEditingCompany, setIsEditingCompany] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
+  const [companySaving, setCompanySaving] = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [uploadingCp, setUploadingCp] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -56,11 +59,12 @@ export default function ProfilPage() {
     provinsi: "",
     website: "",
     tag: [] as string[],
+    wilayah_operasi: [] as string[],
   });
 
   const selectedBidang = normalizeBidang(user?.tag);
 
-  if (!user) return null;
+  if (!user) return <PageSkeleton />;
 
   const startEditingProfile = () => {
     setProfileForm({
@@ -70,6 +74,7 @@ export default function ProfilPage() {
       provinsi: user.provinsi || "",
       website: user.website || "",
       tag: selectedBidang,
+      wilayah_operasi: user.company_profile?.wilayah_operasi || [],
     });
     setIsEditingProfile(true);
   };
@@ -92,6 +97,7 @@ export default function ProfilPage() {
           provinsi: profileForm.provinsi,
           website: profileForm.website,
           tag: profileForm.tag,
+          wilayah_operasi: profileForm.wilayah_operasi,
         })
       });
       const data = await res.json();
@@ -108,6 +114,10 @@ export default function ProfilPage() {
         website: profileForm.website,
         tag: profileForm.tag,
       };
+      // Keep company_profile intact
+      if (user.company_profile) {
+        updatedUser.company_profile = user.company_profile;
+      }
       setUser(updatedUser);
       localStorage.setItem("currentUser", JSON.stringify(updatedUser));
       setIsEditingProfile(false);
@@ -116,6 +126,51 @@ export default function ProfilPage() {
       toast.error("Error: " + message);
     } finally {
       setProfileSaving(false);
+    }
+  };
+
+  const startEditingCompany = () => {
+    setProfileForm((prev) => ({
+      ...prev,
+      wilayah_operasi: user.company_profile?.wilayah_operasi || [],
+    }));
+    setIsEditingCompany(true);
+  };
+
+  const cancelEditingCompany = () => {
+    setIsEditingCompany(false);
+  };
+
+  const saveCompanyProfile = async () => {
+    setCompanySaving(true);
+    try {
+      const res = await fetch("/api/users/update", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: user.id,
+          wilayah_operasi: profileForm.wilayah_operasi,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Kesalahan server");
+
+      const updatedUser = {
+        ...user,
+        company_profile: {
+          ...(user.company_profile || {}),
+          wilayah_operasi: profileForm.wilayah_operasi,
+        },
+      };
+      setUser(updatedUser);
+      localStorage.setItem("currentUser", JSON.stringify(updatedUser));
+      setIsEditingCompany(false);
+      toast.success(language === "EN" ? "Company profile saved" : "Profil perusahaan disimpan");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Terjadi kesalahan";
+      toast.error("Error: " + message);
+    } finally {
+      setCompanySaving(false);
     }
   };
 
@@ -243,7 +298,9 @@ export default function ProfilPage() {
           uploadingFoto={uploadingFoto}
           uploadingCp={uploadingCp}
           isEditingProfile={isEditingProfile}
+          isEditingCompany={isEditingCompany}
           profileSaving={profileSaving}
+          companySaving={companySaving}
           profileForm={profileForm}
           fileInputRef={fileInputRef}
           pdfInputRef={pdfInputRef}
@@ -252,6 +309,9 @@ export default function ProfilPage() {
           onStartEditing={startEditingProfile}
           onCancelEditing={cancelEditingProfile}
           onSaveProfile={saveProfile}
+          onStartEditingCompany={startEditingCompany}
+          onCancelEditingCompany={cancelEditingCompany}
+          onSaveCompany={saveCompanyProfile}
           onFormChange={(f, v) => setProfileForm(p => ({ ...p, [f]: v }))}
           onToggleProfileTag={toggleProfileTag}
           daftarBidang={DAFTAR_BIDANG}

@@ -13,11 +13,6 @@ type StoredUser = {
 export default function LengkapiProfilPage() {
   const [user, setUser] = useState<StoredUser | null>(null);
   
-  // State Avatar
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
-
   // State PDF Company Profile
   const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -33,27 +28,7 @@ export default function LengkapiProfilPage() {
     if (!userData) return router.push("/register");
     const parsed = JSON.parse(userData) as StoredUser;
     setUser(parsed);
-    if (parsed.avatar_url && !parsed.avatar_url.includes("default-avatar")) {
-      setPreviewUrl(parsed.avatar_url);
-    }
   }, [router]);
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      const validTypes = ["image/jpeg", "image/jpg", "image/png"];
-      if (!validTypes.includes(file.type)) {
-        toast.error("Hanya format JPG, JPEG, dan PNG yang diperbolehkan!");
-        return;
-      }
-      if (file.size > 2 * 1024 * 1024) {
-        toast.error("Ukuran maksimal foto adalah 2MB!");
-        return;
-      }
-      setSelectedImage(file);
-      setPreviewUrl(URL.createObjectURL(file));
-    }
-  };
 
   const handlePdfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -74,24 +49,8 @@ export default function LengkapiProfilPage() {
     if (!user) return;
     setIsUploading(true);
 
-    let finalAvatarUrl = previewUrl;
-
     try {
-      // 1. Upload Avatar if exists
-      if (selectedImage) {
-        setUploadStatus("Mengunggah foto profil...");
-        const formData = new FormData();
-        formData.append("avatar", selectedImage);
-        formData.append("userId", String(user.id));
-
-        const res = await fetch("/api/upload", { method: "POST", body: formData });
-        if (!res.ok) throw new Error("Gagal mengunggah foto profil");
-        
-        const data = await res.json();
-        finalAvatarUrl = data.avatar_url;
-      }
-
-      // 2. Upload and Extract PDF if exists
+      // 1. Upload and Extract PDF if exists
       if (selectedPdf) {
         setUploadStatus("Menganalisis Company Profile dengan AI... (Ini butuh beberapa detik)");
         const pdfData = new FormData();
@@ -105,11 +64,6 @@ export default function LengkapiProfilPage() {
         }
       }
 
-      // Update local storage
-      const old = localStorage.getItem("currentUser");
-      const oldUser = old ? JSON.parse(old) : {};
-      localStorage.setItem("currentUser", JSON.stringify({ ...oldUser, avatar_url: finalAvatarUrl }));
-      
       toast.success("Profil berhasil disimpan!");
       router.push("/menyiapkan-dashboard");
     } catch (error: any) {
@@ -151,54 +105,11 @@ export default function LengkapiProfilPage() {
             Lengkapi Profil
           </h2>
           <p className="text-[var(--text-secondary)] mt-1 text-xs sm:text-sm">
-            Tambahkan foto dan Company Profile agar AI dapat mencocokkan tender lebih akurat.
+            Tambahkan Company Profile agar AI dapat mencocokkan tender lebih akurat.
           </p>
         </div>
 
-        {/* 1. Upload Foto Profil */}
-        <div className="flex flex-col items-center justify-center mb-6 w-full">
-          <input 
-            type="file" 
-            ref={imageInputRef} 
-            onChange={handleImageChange} 
-            accept="image/jpeg, image/jpg, image/png"
-            className="hidden" 
-          />
-          
-          <motion.button
-            type="button"
-            onClick={() => imageInputRef.current?.click()}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="relative group w-24 h-24 sm:w-28 sm:h-28 rounded-full border-4 border-dashed overflow-hidden flex items-center justify-center shadow-md transition-all"
-            style={{ 
-              borderColor: previewUrl ? "var(--accent)" : "var(--border-primary)",
-              backgroundColor: "var(--bg-input)"
-            }}
-          >
-            {previewUrl ? (
-              <>
-                <img src={previewUrl} alt="Preview Avatar" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                  <Upload className="text-white w-6 h-6" />
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col items-center gap-1 text-[var(--text-muted)] group-hover:text-[var(--accent)] transition-colors">
-                <UserIcon className="w-8 h-8" />
-                <span className="text-[9px] font-bold uppercase">Foto</span>
-              </div>
-            )}
-          </motion.button>
-        </div>
-
-        <div className="w-full h-px bg-[var(--border-primary)] mb-6 relative">
-          <span className="absolute left-1/2 -translate-x-1/2 -top-2.5 bg-[var(--bg-card)] px-3 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest">
-            Opsional
-          </span>
-        </div>
-
-        {/* 2. Upload Company Profile */}
+        {/* Upload Company Profile */}
         <div className="w-full mb-8">
           <input 
             type="file" 
@@ -236,11 +147,11 @@ export default function LengkapiProfilPage() {
         <div className="w-full flex flex-col gap-3">
           <motion.button
             onClick={handleSimpan}
-            disabled={isUploading || (!selectedImage && !selectedPdf)}
-            whileHover={!isUploading && (selectedImage || selectedPdf) ? { y: -1, scale: 1.005 } : {}}
-            whileTap={!isUploading && (selectedImage || selectedPdf) ? { scale: 0.985 } : {}}
+            disabled={isUploading || !selectedPdf}
+            whileHover={!isUploading && selectedPdf ? { y: -1, scale: 1.005 } : {}}
+            whileTap={!isUploading && selectedPdf ? { scale: 0.985 } : {}}
             className={`w-full rounded-xl py-3.5 sm:py-4 font-bold text-white transition-all text-sm flex items-center justify-center gap-2 ${
-              (!selectedImage && !selectedPdf) ? "bg-slate-300 cursor-not-allowed opacity-70" : "bg-[var(--accent)] shadow-xl shadow-[var(--accent)]/20 hover:bg-[var(--accent-hover)]"
+              !selectedPdf ? "bg-slate-300 cursor-not-allowed opacity-70" : "bg-[var(--accent)] shadow-xl shadow-[var(--accent)]/20 hover:bg-[var(--accent-hover)]"
             }`}
           >
             {isUploading && <Loader2 className="w-5 h-5 animate-spin" />}

@@ -5,7 +5,7 @@ import { UserModel } from "@/models/User";
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, tag, perusahaan, email, kota, provinsi } = body;
+    const { id, tag, perusahaan, email, kota, provinsi, wilayah_operasi } = body;
 
     if (!id) {
       return NextResponse.json({ error: "User ID diperlukan" }, { status: 400 });
@@ -20,6 +20,9 @@ export async function PUT(req: NextRequest) {
     if (email !== undefined) updateData.email = email.toLowerCase();
     if (kota !== undefined) updateData.kota = kota;
     if (provinsi !== undefined) updateData.provinsi = provinsi;
+    if (wilayah_operasi !== undefined) {
+      updateData["company_profile.wilayah_operasi"] = wilayah_operasi;
+    }
 
     const updatedUser = await UserModel.findByIdAndUpdate(
       id,
@@ -40,7 +43,8 @@ export async function PUT(req: NextRequest) {
         role: updatedUser.role,
         avatar_url: updatedUser.avatar_url,
         kota: updatedUser.kota,
-        provinsi: updatedUser.provinsi
+        provinsi: updatedUser.provinsi,
+        company_profile: updatedUser.company_profile
       }
     }, { status: 200 });
 

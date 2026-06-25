@@ -4,9 +4,10 @@ import { useDashboard } from "@/app/dashboard/DashboardContext";
 import { useEffect, useState } from "react";
 import { Bell, Sparkles, CalendarClock, Inbox } from "lucide-react";
 import { motion } from "framer-motion";
+import PageSkeleton from "@/components/common/PageSkeleton";
 
 export default function NotifikasiPage() {
-  const { notificationsHistory, markNotifAsRead, language, setSelectedItem } = useDashboard();
+  const { user, notificationsHistory, markNotifAsRead, language, setSelectedItem } = useDashboard();
 
   useEffect(() => {
     markNotifAsRead();
@@ -62,6 +63,8 @@ export default function NotifikasiPage() {
       } as any);
     }
   };
+
+  if (!user) return <PageSkeleton />;
 
   return (
     <div className="p-6 max-w-2xl mx-auto">

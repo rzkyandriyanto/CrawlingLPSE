@@ -52,7 +52,7 @@ export default function LandingPage() {
     }, []);
 
     const { scrollY } = useScroll();
-    const backgroundY = useTransform(scrollY, [0, 1000], ["0%", "10%"]);
+    const backgroundY = useTransform(scrollY, [0, 1000], ["0%", "-10%"]);
     const opacityText = useTransform(scrollY, [0, 300], [1, 0]);
     const heroText1X = useTransform(scrollY, [0, 800], [0, -80]);
     const heroText2X = useTransform(scrollY, [0, 800], [0, 80]);
@@ -96,7 +96,7 @@ export default function LandingPage() {
                     <div className="hidden md:flex items-center gap-8 font-bold text-sm text-slate-600">
                         <Link href="#" className="hover:text-black transition-colors">Produk</Link>
                         <Link href="#" className="hover:text-black transition-colors">Lelang LPSE</Link>
-                        <Link href="#" className="hover:text-black transition-colors">Tentang Kami</Link>
+                        <Link href="https://seleno.id/" target="_blank" rel="noopener noreferrer" className="hover:text-black transition-colors">Tentang Kami</Link>
                     </div>
 
                     {/* Right: Desktop buttons + Mobile Hamburger */}
@@ -135,7 +135,7 @@ export default function LandingPage() {
                     >
                         <Link href="#" onClick={() => setMobileMenuOpen(false)} className="font-bold text-[var(--text-primary)] py-2 border-b border-slate-100">Produk</Link>
                         <Link href="#" onClick={() => setMobileMenuOpen(false)} className="font-bold text-[var(--text-primary)] py-2 border-b border-slate-100">Lelang LPSE</Link>
-                        <Link href="#" onClick={() => setMobileMenuOpen(false)} className="font-bold text-[var(--text-primary)] py-2 border-b border-slate-100">Tentang Kami</Link>
+                        <Link href="https://seleno.id/" target="_blank" rel="noopener noreferrer" onClick={() => setMobileMenuOpen(false)} className="font-bold text-[var(--text-primary)] py-2 border-b border-slate-100">Tentang Kami</Link>
                         <div className="flex gap-2 mt-1">
                             <Link
                                 href="/login"

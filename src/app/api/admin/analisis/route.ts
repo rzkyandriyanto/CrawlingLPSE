@@ -9,8 +9,84 @@ export async function GET(req: NextRequest) {
     await connectToDatabase();
 
     const url = new URL(req.url);
+    const tipe = url.searchParams.get("tipe"); // "barang", "jasa", "pengguna"
     const mode = url.searchParams.get("mode") || "completed"; // "completed", "failed", "all"
 
+    // ─────────────────────────────────────────────────────────────────
+    // ANALISIS PENGGUNA
+    // ─────────────────────────────────────────────────────────────────
+    if (tipe === "pengguna") {
+      const users = await UserModel.find({}).lean();
+      
+      const totalUser = users.length;
+      
+      // Hitung User Aktif Bulan Ini (misal dilihat dari updatedAt atau login terakhir, 
+      // tapi asumsikan dari updatedAt >= awal bulan ini)
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const activeUsers = users.filter((u: any) => new Date(u.updatedAt || u.createdAt) >= startOfMonth).length;
+
+      // Rating User Overall
+      const ratings = await ReviewModel.aggregate([
+        { $match: { rating: { $exists: true, $ne: null } } },
+        { $group: { _id: null, avgRating: { $avg: "$rating" } } }
+      ]);
+      const avgRating = ratings.length > 0 ? ratings[0].avgRating : 0;
+
+      // Tren pencarian keyword per minggu (dummy tren from history)
+      const searchMap: Record<string, number> = {};
+      const minatMap: Record<string, number> = {};
+      const provMap: Record<string, number> = {};
+
+      for (const user of users) {
+        // Keyword Search
+        if ((user as any).search_history) {
+          for (const kw of (user as any).search_history) {
+            const w = kw.toLowerCase().trim();
+            if (w) searchMap[w] = (searchMap[w] || 0) + 1;
+          }
+        }
+        
+        // Bidang Minat
+        if ((user as any).bidang_minat && Array.isArray((user as any).bidang_minat)) {
+          for (const bm of (user as any).bidang_minat) {
+            if (bm) minatMap[bm] = (minatMap[bm] || 0) + 1;
+          }
+        } else if ((user as any).tag) {
+          const t = (user as any).tag;
+          minatMap[t] = (minatMap[t] || 0) + 1;
+        }
+
+        // Provinsi
+        const prov = (user as any).provinsi || "Tidak Diketahui";
+        provMap[prov] = (provMap[prov] || 0) + 1;
+      }
+
+      const topKeywords = Object.entries(searchMap)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([w, c]) => ({ name: w, count: c }));
+
+      const topMinat = Object.entries(minatMap)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([name, count]) => ({ name, count }));
+
+      const topProvinsi = Object.entries(provMap)
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, count]) => ({ name, count }));
+
+      return NextResponse.json({
+        kpi: { totalUser, activeUsers, avgRating },
+        chartKeyword: topKeywords,
+        chartMinat: topMinat,
+        chartProvinsi: topProvinsi,
+      }, { status: 200 });
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // ANALISIS BARANG & JASA
+    // ─────────────────────────────────────────────────────────────────
     const parsePagu = (paguStr: string) => {
       if (!paguStr) return 0;
       const numStr = paguStr.replace(/Rp\.?|[^0-9,-]/g, "").replace(/,/g, ".");
@@ -18,210 +94,153 @@ export async function GET(req: NextRequest) {
       return isNaN(num) ? 0 : num;
     };
 
-    // ── Query dasar ──
-    let baseQuery: any = {};
-    if (mode === "completed") {
-      baseQuery = { $or: [{ is_deleted: true }, { status: "menang" }, { status: "selesai" }] };
-    } else if (mode === "failed") {
-      baseQuery = { 
-        $or: [
-          { status: "gagal" }, 
-          { status: "batal" },
-          { tahap_saat_ini: { $regex: /batal|gagal|ulang/i } }
-        ] 
-      };
-    } else {
-      baseQuery = {};
+    let baseQuery: any = { is_deleted: { $ne: true } };
+    
+    // Tipe filter based on TAG
+    if (tipe === "barang") {
+      baseQuery.tag = { $in: ["Teknologi", "Kesehatan", "Pendidikan", "Otomotif"] };
+    } else if (tipe === "jasa") {
+      baseQuery.tag = { $in: ["Konstruksi", "Konsultansi", "Jasa Umum", "Lainnya"] };
     }
 
-    // ── 1. Insight Cards: Agregasi di sisi MongoDB ──
+    // Mode filter
+    if (mode === "completed") {
+      baseQuery.$or = [{ is_deleted: true }, { status: "menang" }, { status: "selesai" }];
+    } else if (mode === "failed") {
+      baseQuery.$or = [
+        { status: "gagal" }, 
+        { status: "batal" },
+        { tahap_saat_ini: { $regex: /batal|gagal|ulang/i } }
+      ];
+    }
+
     const [
       totalCount,
       statusBreakdown,
       topInstansi,
-      topKategori,
-      avgPagu,
-      tipeBreakdown,
-      ratingsAggregate
+      avgPaguResult,
+      trendData,
+      winRateData
     ] = await Promise.all([
-      // Total data
       TenderModel.countDocuments(baseQuery),
 
-      // Breakdown status (menang, selesai, aktif, dll)
       TenderModel.aggregate([
         { $match: baseQuery },
         { $group: { _id: "$status", count: { $sum: 1 } } },
         { $sort: { count: -1 } },
       ]),
 
-      // Top 5 instansi
       TenderModel.aggregate([
-        // Filter instansi yang tidak null/kosong
         { $match: { ...baseQuery, instansi: { $nin: [null, "", "-", "Lainnya"] } } },
-        { $group: { _id: "$instansi", count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-        { $limit: 5 },
+        { $group: { _id: "$instansi", totalPagu: { $sum: "$pagu_num" }, count: { $sum: 1 } } },
+        { $sort: { totalPagu: -1 } },
+        { $limit: 10 },
       ]),
 
-      // Top 5 bidang/tag (bidang nyata: Konstruksi, IT, Kesehatan, dll)
-      TenderModel.aggregate([
-        // Filter tag yang tidak null/kosong/"Lainnya"
-        { $match: { ...baseQuery, tag: { $nin: [null, "", "-", "Lainnya"] } } },
-        { $group: { _id: "$tag", count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-        { $limit: 5 },
-      ]),
-
-      // Rata-rata Pagu (hanya yang pagu_num > 0)
       TenderModel.aggregate([
         { $match: { ...baseQuery, pagu_num: { $gt: 0 } } },
         { $group: { _id: null, avg: { $avg: "$pagu_num" }, total: { $sum: "$pagu_num" } } },
       ]),
 
-      // Breakdown Barang vs Jasa (berdasarkan keyword "belanja" di nama_paket)
+      // Line chart: Tren tender per bulan (6 bulan terakhir)
       TenderModel.aggregate([
         { $match: baseQuery },
         {
-          $addFields: {
-            isBarang: { $regexMatch: { input: "$nama_paket", regex: /belanja/i } }
+          $group: {
+            _id: {
+              year: { $year: "$createdAt" },
+              month: { $month: "$createdAt" }
+            },
+            count: { $sum: 1 }
           }
         },
-        { $group: { _id: { $cond: ["$isBarang", "Barang", "Jasa"] }, count: { $sum: 1 } } }
+        { $sort: { "_id.year": -1, "_id.month": -1 } },
+        { $limit: 6 }
       ]),
 
-      // Aggregate all ratings from ReviewModel
-      ReviewModel.aggregate([
-        { $match: { rating: { $exists: true, $ne: null } } },
-        { $group: { _id: "$itemId", avgRating: { $avg: "$rating" } } }
-      ])
+      // Win Rate per wilayah (hanya untuk JASA, tapi kita query saja jika diminta)
+      tipe === "jasa" ? TenderModel.aggregate([
+        { $match: { ...baseQuery, wilayah: { $nin: [null, "", "-"] } } },
+        {
+          $group: {
+            _id: "$wilayah",
+            total: { $sum: 1 },
+            menang: { $sum: { $cond: [{ $in: ["$status", ["menang", "selesai"]] }, 1, 0] } }
+          }
+        },
+        { $sort: { total: -1 } },
+        { $limit: 10 }
+      ]) : Promise.resolve([])
     ]);
 
-    const users = await UserModel.find({}, { search_history: 1 }).lean();
-    const searchMap: Record<string, number> = {};
-    for (const user of users) {
-      if ((user as any).search_history) {
-        for (const kw of (user as any).search_history) {
-          const w = kw.toLowerCase().trim();
-          if (w) {
-            searchMap[w] = (searchMap[w] || 0) + 1;
-          }
-        }
-      }
-    }
-
-    const topKeywords = Object.entries(searchMap)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 15)
-      .map(([w, c], idx) => ({ keyword: w, count: c, trend: idx % 2 === 0 ? "up" : "down" }));
-
-    const insights = {
-      total: totalCount,
-      tipeBreakdown: {
-        barang: tipeBreakdown.find((t: any) => t._id === "Barang")?.count || 0,
-        jasa: tipeBreakdown.find((t: any) => t._id === "Jasa")?.count || 0,
-      },
-      statusBreakdown: statusBreakdown.map((s: any) => ({
-        status: s._id || "tidak diketahui",
-        count: s.count,
-        pct: totalCount > 0 ? Math.round((s.count / totalCount) * 1000) / 10 : 0, // 1 desimal
-      })),
-      topInstansi: topInstansi.map((i: any) => ({ nama: i._id || "-", count: i.count })),
-      topKategori: topKategori.map((k: any) => ({ nama: k._id || "-", count: k.count })),
-      avgPagu: avgPagu[0]?.avg ?? 0,
-      totalNilai: avgPagu[0]?.total ?? 0,
-      // Hitung konversi selesai (tender yang mencapai tahap akhir)
-      totalSelesai: statusBreakdown
-        .filter((s: any) => s._id === "selesai" || s._id === "menang")
-        .reduce((acc: number, s: any) => acc + s.count, 0),
-      topKeywords: topKeywords,
-    };
-
-    // Calculate overall average rating and map it per tender
-    const ratingMap: Record<string, number> = {};
-    let totalRatingSum = 0;
-    let ratedTendersCount = 0;
-    
-    if (ratingsAggregate && Array.isArray(ratingsAggregate)) {
-      for (const r of ratingsAggregate) {
-        if (r._id && r.avgRating) {
-          ratingMap[r._id] = r.avgRating;
-          totalRatingSum += r.avgRating;
-          ratedTendersCount++;
-        }
-      }
-    }
-    
-    // Add to insights
-    (insights as any).avgRatingOverall = ratedTendersCount > 0 ? (totalRatingSum / ratedTendersCount) : 0;
-    (insights as any).totalRatedTenders = ratedTendersCount;
-
-    // ── 2. Daftar data untuk tabel (max 2500) ──
-    const tenders = await TenderModel.find(baseQuery)
-      .sort({ updatedAt: -1 })
-      .limit(2500)
-      .lean();
-
-    const parseJadwalDate = (dateStr: string) => {
-      if (!dateStr || dateStr === "-") return null;
-      const monthMap: Record<string, string> = {
-        Januari: "01", Februari: "02", Maret: "03", April: "04",
-        Mei: "05", Juni: "06", Juli: "07", Agustus: "08",
-        September: "09", Oktober: "10", November: "11", Desember: "12"
-      };
-      const match = dateStr.trim().match(/^(\d{1,2})\s+(\w+)\s+(\d{4})(?:\s+(\d{2}:\d{2}))?/);
-      if (match) {
-        const [, day, monthName, year, time] = match;
-        const month = monthMap[monthName] || "01";
-        const timeStr = time || "23:59";
-        const parsed = new Date(`${year}-${month}-${day.padStart(2, "0")}T${timeStr}:00+07:00`);
-        return isNaN(parsed.getTime()) ? null : parsed;
-      }
-      const fallback = new Date(dateStr);
-      return isNaN(fallback.getTime()) ? null : fallback;
-    };
-
-    const data = tenders.map((t: any) => {
-      const jadwal = Array.isArray(t.jadwal) ? t.jadwal : [];
-      let durasi_hari = null;
-      let jumlah_reschedule = 0;
-
-      if (jadwal.length > 0) {
-        jumlah_reschedule = jadwal.filter((j: any) => j.perubahan && j.perubahan.trim() !== "" && j.perubahan.trim().toLowerCase() !== "tidak ada").length;
-        
-        const dates = jadwal.flatMap((j: any) => [parseJadwalDate(j.mulai), parseJadwalDate(j.sampai)]).filter((d: any) => d !== null) as Date[];
-        if (dates.length > 0) {
-          const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
-          const maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
-          durasi_hari = Math.ceil((maxDate.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24));
-        }
-      }
-
+    // Format chartTren
+    const chartTren = trendData.reverse().map((d: any) => {
+      const date = new Date(d._id.year, d._id.month - 1);
+      const monthName = date.toLocaleString('default', { month: 'short' });
       return {
-      id: t._id.toString(),
-      lelangId: t.lelangId,
-      nama_paket: t.nama_paket,
-      instansi: t.instansi,
-      kategori: t.kategori,
-      status: t.status,
-      metode_pengadaan: t.metode_pengadaan,
-      pagu: t.pagu,
-      hps: t.hps,
-        pagu_num: t.pagu_num ?? 0,
-        hps_num: t.hps_num ?? 0,
-        durasi_hari,
-        jumlah_reschedule,
-        is_deleted: t.is_deleted ?? false,
-        created_at: t.createdAt,
-        updated_at: t.updatedAt,
-        pemenang_nama: t.pemenang_nama || null,
-        pemenang_harga: t.pemenang_harga || null,
-        pemenang_harga_num: t.pemenang_harga ? parsePagu(t.pemenang_harga) : 0,
-        peserta_evaluasi: t.peserta_evaluasi || null,
-        rating: ratingMap[t.lelangId || t._id.toString()] || 0, // Ambil rating dari map
+        name: `${monthName} ${d._id.year}`,
+        count: d.count
       };
     });
 
-    return NextResponse.json({ insights, data }, { status: 200 });
+    // Format chartWinRate
+    const chartWinRate = winRateData.map((d: any) => ({
+      wilayah: d._id,
+      winRate: d.total > 0 ? Math.round((d.menang / d.total) * 100) : 0,
+      total: d.total,
+      menang: d.menang
+    }));
+
+    const kpi = {
+      totalTender: totalCount,
+      totalNilaiPagu: avgPaguResult[0]?.total ?? 0,
+      avgPagu: avgPaguResult[0]?.avg ?? 0,
+      jumlahInstansi: topInstansi.length, // approximation or distinct count
+    };
+
+    // Calculate exact distinct instansi count for KPI
+    if (totalCount > 0) {
+      const distinctInstansi = await TenderModel.distinct("instansi", baseQuery);
+      kpi.jumlahInstansi = distinctInstansi.length;
+    }
+
+    const chartInstansi = topInstansi.map((i: any) => ({
+      nama: i._id || "-",
+      totalPagu: i.totalPagu,
+      count: i.count
+    }));
+
+    const chartStatus = statusBreakdown.map((s: any) => ({
+      status: s._id || "tidak diketahui",
+      count: s.count
+    }));
+
+    // Data for Table
+    const tenders = await TenderModel.find(baseQuery)
+      .sort({ updatedAt: -1 })
+      .limit(100) // limit for table
+      .select("nama_paket instansi pagu pagu_num status wilayah")
+      .lean();
+
+    const tabel = tenders.map((t: any) => ({
+      id: t._id.toString(),
+      nama_paket: t.nama_paket,
+      instansi: t.instansi,
+      pagu: t.pagu,
+      pagu_num: t.pagu_num,
+      status: t.status,
+      wilayah: t.wilayah
+    }));
+
+    return NextResponse.json({
+      kpi,
+      chartInstansi,
+      chartStatus,
+      chartTren,
+      chartWinRate,
+      tabel
+    }, { status: 200 });
+
   } catch (error: any) {
     console.error("Fetch Analisis Data Error:", error);
     return NextResponse.json({ error: "Terjadi kesalahan server" }, { status: 500 });
